@@ -1,0 +1,561 @@
+"use client";
+
+import React, { useState, useEffect, useMemo } from "react";
+import confetti from "canvas-confetti";
+import {
+  Calendar as CalendarIcon,
+  Check,
+  Copy,
+  Download,
+  Share2,
+  Sparkles,
+  Users,
+  Radio,
+  ExternalLink,
+  ChevronRight,
+  Info,
+  CalendarPlus,
+  Shield,
+  Dices,
+} from "lucide-react";
+import { Poll, AvailabilityMap } from "@/lib/supabase";
+import {
+  getMonthDays,
+  MONTH_NAMES_ES,
+  WEEKDAYS_ES,
+  formatFriendlyDate,
+  generateWhatsAppSummary,
+  generateGoogleCalendarUrl,
+  generateIcsContent,
+  downloadIcsFile,
+  CalendarDay,
+} from "@/lib/calendarUtils";
+
+interface MonthSchedulerProps {
+  initialPoll: Poll;
+  onUpdateAvailability: (newAvailability: AvailabilityMap) => Promise<boolean>;
+  isRealtimeConnected: boolean;
+}
+
+export default function MonthScheduler({
+  initialPoll,
+  onUpdateAvailability,
+  isRealtimeConnected,
+}: MonthSchedulerProps) {
+  const [poll, setPoll] = useState<Poll>(initialPoll);
+  const [selectedPlayer, setSelectedPlayer] = useState<string>("");
+  const [hoveredDay, setHoveredDay] = useState<CalendarDay | null>(null);
+  const [activeDayModal, setActiveDayModal] = useState<CalendarDay | null>(null);
+  const [copiedWhatsApp, setCopiedWhatsApp] = useState<boolean>(false);
+  const [isUpdating, setIsUpdating] = useState<boolean>(false);
+
+  // Sincronizar estado local con props entrantes (Realtime)
+  useEffect(() => {
+    setPoll(initialPoll);
+  }, [initialPoll]);
+
+  // Recordar al jugador en localStorage
+  useEffect(() => {
+    const storageKey = `dnd_player_${poll.slug}`;
+    const savedPlayer = localStorage.getItem(storageKey);
+    if (savedPlayer && poll.participants.includes(savedPlayer)) {
+      setSelectedPlayer(savedPlayer);
+    }
+  }, [poll.slug, poll.participants]);
+
+  const handlePlayerChange = (player: string) => {
+    setSelectedPlayer(player);
+    if (player) {
+      localStorage.setItem(`dnd_player_${poll.slug}`, player);
+    }
+  };
+
+  const calendarDays = useMemo(() => {
+    return getMonthDays(poll.year, poll.month);
+  }, [poll.year, poll.month]);
+
+  const totalParticipants = poll.participants.length;
+
+  // Lista de fechas que alcanzaron quórum estricto (100%)
+  const confirmedDates = useMemo(() => {
+    if (totalParticipants === 0) return [];
+    return Object.entries(poll.availability)
+      .filter(([_, voters]) => voters && voters.length >= totalParticipants)
+      .map(([date]) => date)
+      .sort();
+  }, [poll.availability, totalParticipants]);
+
+  // Alternar disponibilidad del jugador actual para una fecha
+  const toggleDateAvailability = async (dateStr: string) => {
+    if (!selectedPlayer) {
+      // Si no ha seleccionado jugador, resaltar o avisar
+      alert("Por favor selecciona tu nombre en el selector superior antes de votar.");
+      return;
+    }
+
+    const currentVoters = poll.availability[dateStr] || [];
+    const isCurrentlyAvailable = currentVoters.includes(selectedPlayer);
+
+    let updatedVoters: string[];
+    if (isCurrentlyAvailable) {
+      updatedVoters = currentVoters.filter((name) => name !== selectedPlayer);
+    } else {
+      updatedVoters = [...currentVoters, selectedPlayer];
+    }
+
+    const newAvailability: AvailabilityMap = {
+      ...poll.availability,
+      [dateStr]: updatedVoters,
+    };
+
+    // Actualización optimista
+    setPoll((prev) => ({
+      ...prev,
+      availability: newAvailability,
+    }));
+
+    // Si con este voto se alcanza el 100% de quórum, ¡celebración con confeti!
+    if (!isCurrentlyAvailable && updatedVoters.length === totalParticipants && totalParticipants > 0) {
+      confetti({
+        particleCount: 120,
+        spread: 80,
+        origin: { y: 0.6 },
+        colors: ["#10b981", "#34d399", "#d4af37", "#f59e0b", "#6366f1"],
+      });
+    }
+
+    setIsUpdating(true);
+    await onUpdateAvailability(newAvailability);
+    setIsUpdating(false);
+  };
+
+  const handleCopyWhatsApp = () => {
+    const currentUrl = typeof window !== "undefined" ? window.location.href : "";
+    const summary = generateWhatsAppSummary(
+      poll.title,
+      poll.year,
+      poll.month,
+      poll.participants,
+      confirmedDates,
+      currentUrl
+    );
+
+    navigator.clipboard.writeText(summary);
+    setCopiedWhatsApp(true);
+    setTimeout(() => setCopiedWhatsApp(false), 3000);
+  };
+
+  const handleDownloadIcs = () => {
+    if (confirmedDates.length === 0) {
+      alert("Aún no hay fechas confirmadas con el 100% de quórum para exportar.");
+      return;
+    }
+    const icsString = generateIcsContent(poll.title, confirmedDates);
+    const filename = `dnd-${poll.slug}-sesiones.ics`;
+    downloadIcsFile(filename, icsString);
+  };
+
+  const monthLabel = `${MONTH_NAMES_ES[poll.month - 1]} ${poll.year}`;
+
+  return (
+    <div className="w-full max-w-5xl mx-auto space-y-6">
+      {/* Barra de Encabezado y Selector de Jugador */}
+      <div className="bg-zinc-900/90 backdrop-blur-md border border-zinc-800/80 rounded-2xl p-4 sm:p-6 shadow-2xl relative overflow-hidden">
+        {/* Glow sutil */}
+        <div className="absolute -right-20 -top-20 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+          <div>
+            <div className="flex items-center gap-3">
+              <span className="p-2 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-xl">
+                <Dices className="w-6 h-6" />
+              </span>
+              <div>
+                <span className="text-xs uppercase tracking-widest text-amber-400/90 font-semibold">
+                  Campaña D&D
+                </span>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-zinc-100 tracking-tight">
+                  {poll.title}
+                </h1>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4 mt-3 text-xs sm:text-sm text-zinc-400">
+              <span className="flex items-center gap-1.5 font-medium text-zinc-300">
+                <CalendarIcon className="w-4 h-4 text-amber-400" />
+                {monthLabel}
+              </span>
+              <span className="flex items-center gap-1.5 font-medium text-zinc-300">
+                <Users className="w-4 h-4 text-amber-400" />
+                {totalParticipants} participantes
+              </span>
+              <span className="text-zinc-500">•</span>
+              <span className="text-zinc-400 font-medium">
+                ⏰ Horario: <strong className="text-zinc-200">8:30 PM</strong>
+              </span>
+              <div className="flex items-center gap-1.5 ml-auto sm:ml-0">
+                <Radio
+                  className={`w-3.5 h-3.5 ${
+                    isRealtimeConnected ? "text-emerald-400 animate-pulse" : "text-zinc-500"
+                  }`}
+                />
+                <span className="text-xs text-zinc-400">
+                  {isRealtimeConnected ? "En vivo" : "Conectando..."}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Selector "¿Quién eres?" */}
+          <div className="bg-zinc-950/80 border border-zinc-800 rounded-xl p-3 sm:p-4 min-w-[280px]">
+            <label className="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wider flex items-center gap-1.5">
+              <Shield className="w-3.5 h-3.5 text-amber-400" />
+              ¿Quién eres en la mesa?
+            </label>
+            <select
+              value={selectedPlayer}
+              onChange={(e) => handlePlayerChange(e.target.value)}
+              className="w-full bg-zinc-900 text-zinc-100 border border-zinc-700 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all cursor-pointer"
+            >
+              <option value="">-- Elige tu personaje / nombre --</option>
+              {poll.participants.map((player) => (
+                <option key={player} value={player}>
+                  {player}
+                </option>
+              ))}
+            </select>
+            {!selectedPlayer ? (
+              <p className="text-[11px] text-amber-400/90 mt-1.5 flex items-center gap-1">
+                <Info className="w-3 h-3 flex-shrink-0" />
+                Selecciona tu nombre para marcar tus días disponibles.
+              </p>
+            ) : (
+              <p className="text-[11px] text-emerald-400 mt-1.5 flex items-center gap-1">
+                <Check className="w-3 h-3" />
+                Interactuando como <strong className="font-semibold">{selectedPlayer}</strong>
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Alerta si ya hay fechas con 100% quórum */}
+      {confirmedDates.length > 0 && (
+        <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 backdrop-blur-sm shadow-lg shadow-emerald-950/20">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg">
+              <Sparkles className="w-5 h-5 animate-spin" style={{ animationDuration: "6s" }} />
+            </div>
+            <div>
+              <h4 className="text-emerald-300 font-bold text-sm sm:text-base flex items-center gap-2">
+                ¡{confirmedDates.length}{" "}
+                {confirmedDates.length === 1 ? "fecha confirmada" : "fechas confirmadas"} con Quórum
+                Total (100%)!
+              </h4>
+              <p className="text-xs sm:text-sm text-emerald-200/80">
+                Todos los {totalParticipants} miembros pueden jugar en:{" "}
+                <span className="font-semibold text-emerald-100">
+                  {confirmedDates.map((d) => formatFriendlyDate(d)).join(" | ")}
+                </span>
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              onClick={handleCopyWhatsApp}
+              className="flex-1 sm:flex-initial px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              {copiedWhatsApp ? "¡Copiado!" : "Copiar para WhatsApp"}
+            </button>
+            <button
+              onClick={handleDownloadIcs}
+              className="flex-1 sm:flex-initial px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all border border-zinc-700"
+              title="Descargar archivo .ics"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Descargar .ics
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Calendario Mensual */}
+      <div className="bg-zinc-900/80 border border-zinc-800/80 rounded-2xl p-4 sm:p-6 backdrop-blur-md shadow-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg sm:text-xl font-bold text-zinc-100 flex items-center gap-2">
+            <CalendarIcon className="w-5 h-5 text-amber-400" />
+            Calendario de Disponibilidad
+          </h2>
+          <div className="flex items-center gap-4 text-xs text-zinc-400">
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full bg-emerald-500/20 border border-emerald-500 inline-block" />
+              <span>100% Quórum</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full bg-amber-500/20 border border-amber-500 inline-block" />
+              <span>Tu voto</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Encabezado Días de la semana */}
+        <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-2">
+          {WEEKDAYS_ES.map((day, idx) => (
+            <div
+              key={day}
+              className={`text-center py-2 text-xs font-bold uppercase tracking-wider ${
+                idx >= 5 ? "text-amber-400/80" : "text-zinc-400"
+              }`}
+            >
+              {day}
+            </div>
+          ))}
+        </div>
+
+        {/* Grilla de Días */}
+        <div className="grid grid-cols-7 gap-1.5 sm:gap-2.5">
+          {calendarDays.map((cellDay, index) => {
+            const dateKey = cellDay.dateString;
+            const voters = poll.availability[dateKey] || [];
+            const voterCount = voters.length;
+            const isQuorumReached = voterCount >= totalParticipants && totalParticipants > 0;
+            const isSelectedPlayerVoted = selectedPlayer ? voters.includes(selectedPlayer) : false;
+            const percentage = totalParticipants > 0 ? (voterCount / totalParticipants) * 100 : 0;
+
+            if (!cellDay.isCurrentMonth) {
+              return (
+                <div
+                  key={index}
+                  className="min-h-[85px] sm:min-h-[110px] p-2 rounded-xl bg-zinc-950/30 border border-zinc-900/50 opacity-25 flex flex-col justify-between select-none"
+                >
+                  <span className="text-xs text-zinc-600 font-medium">{cellDay.dayNumber}</span>
+                </div>
+              );
+            }
+
+            return (
+              <div
+                key={dateKey}
+                onClick={() => toggleDateAvailability(dateKey)}
+                onMouseEnter={() => setHoveredDay(cellDay)}
+                onMouseLeave={() => setHoveredDay(null)}
+                className={`group relative min-h-[90px] sm:min-h-[115px] p-2 sm:p-2.5 rounded-xl border transition-all duration-200 cursor-pointer flex flex-col justify-between select-none ${
+                  isQuorumReached
+                    ? "bg-emerald-950/50 border-emerald-500 hover:border-emerald-400 shadow-lg shadow-emerald-950/30 hover:shadow-emerald-900/50"
+                    : isSelectedPlayerVoted
+                    ? "bg-amber-950/30 border-amber-500/60 hover:border-amber-400"
+                    : "bg-zinc-950/70 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/40"
+                }`}
+              >
+                {/* Cabecera de celda: Día + Checkbox de usuario */}
+                <div className="flex items-center justify-between">
+                  <span
+                    className={`text-xs sm:text-sm font-bold ${
+                      isQuorumReached
+                        ? "text-emerald-300"
+                        : cellDay.isWeekend
+                        ? "text-amber-400"
+                        : "text-zinc-300"
+                    }`}
+                  >
+                    {cellDay.dayNumber}
+                  </span>
+
+                  {/* Indicador de si el jugador activo votó este día */}
+                  {selectedPlayer && (
+                    <span
+                      title={
+                        isSelectedPlayerVoted
+                          ? "Marcaste disponible este día (clic para quitar)"
+                          : "No has marcado este día (clic para marcar)"
+                      }
+                      className={`w-4 h-4 rounded-md flex items-center justify-center transition-all ${
+                        isSelectedPlayerVoted
+                          ? "bg-amber-500 text-zinc-950 shadow-sm"
+                          : "border border-zinc-700 group-hover:border-zinc-500"
+                      }`}
+                    >
+                      {isSelectedPlayerVoted && <Check className="w-3 h-3 stroke-[3]" />}
+                    </span>
+                  )}
+                </div>
+
+                {/* Badge central de Quórum */}
+                <div className="my-auto py-1 flex justify-center">
+                  {isQuorumReached ? (
+                    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500 text-zinc-950 font-black text-xs sm:text-sm shadow-md shadow-emerald-500/30 animate-pulse">
+                      <span>★</span>
+                      <span>
+                        {voterCount}/{totalParticipants}
+                      </span>
+                    </div>
+                  ) : (
+                    <div
+                      className={`inline-flex items-center px-1.5 sm:px-2 py-0.5 rounded-md font-bold text-[11px] sm:text-xs ${
+                        voterCount > 0
+                          ? "bg-zinc-800 text-zinc-200 border border-zinc-700"
+                          : "bg-zinc-900/60 text-zinc-600 border border-zinc-800/50"
+                      }`}
+                    >
+                      {voterCount}/{totalParticipants}
+                    </div>
+                  )}
+                </div>
+
+                {/* Mini Barra de progreso visual */}
+                <div className="w-full space-y-1">
+                  <div className="w-full h-1 sm:h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-300 rounded-full ${
+                        isQuorumReached
+                          ? "bg-emerald-400"
+                          : voterCount > 0
+                          ? "bg-amber-500"
+                          : "bg-transparent"
+                      }`}
+                      style={{ width: `${percentage}%` }}
+                    />
+                  </div>
+
+                  {/* Votantes visibles en pantallas medianas */}
+                  <div className="hidden sm:flex items-center gap-1 overflow-hidden text-[10px] text-zinc-400 truncate">
+                    {voterCount > 0 ? (
+                      <span className="truncate">
+                        {voters.slice(0, 2).join(", ")}
+                        {voters.length > 2 && ` +${voters.length - 2}`}
+                      </span>
+                    ) : (
+                      <span className="text-zinc-600 italic">Sin votos</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Tooltip flotante al pasar el cursor */}
+                {hoveredDay?.dateString === dateKey && (
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-30 w-56 p-3 bg-zinc-950/95 border border-zinc-700 rounded-xl shadow-2xl backdrop-blur-md pointer-events-none text-left">
+                    <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-zinc-800">
+                      <span className="text-xs font-bold text-zinc-200">
+                        {formatFriendlyDate(dateKey)}
+                      </span>
+                      <span
+                        className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${
+                          isQuorumReached
+                            ? "bg-emerald-500/20 text-emerald-300"
+                            : "bg-zinc-800 text-zinc-400"
+                        }`}
+                      >
+                        {voterCount}/{totalParticipants}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1 text-xs">
+                      <div className="text-[11px] text-zinc-400 font-semibold uppercase tracking-wider">
+                        Confirmados ({voterCount}):
+                      </div>
+                      {voterCount > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {voters.map((name) => (
+                            <span
+                              key={name}
+                              className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200 text-[11px] border border-zinc-700"
+                            >
+                              {name}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-zinc-500 italic text-[11px]">Nadie ha confirmado aún.</p>
+                      )}
+
+                      {totalParticipants - voterCount > 0 && (
+                        <>
+                          <div className="text-[11px] text-zinc-500 font-semibold uppercase tracking-wider pt-1">
+                            Faltan ({totalParticipants - voterCount}):
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {poll.participants
+                              .filter((p) => !voters.includes(p))
+                              .map((name) => (
+                                <span
+                                  key={name}
+                                  className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-500 text-[11px]"
+                                >
+                                  {name}
+                                </span>
+                              ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Barra de Acciones de Exportación */}
+      <div className="bg-zinc-900/80 border border-zinc-800/80 rounded-2xl p-4 sm:p-6 backdrop-blur-md shadow-2xl flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+        <div>
+          <h3 className="text-base font-bold text-zinc-200 flex items-center gap-2">
+            <Share2 className="w-4 h-4 text-amber-400" />
+            Exportar y Notificar al Grupo
+          </h3>
+          <p className="text-xs text-zinc-400 mt-0.5">
+            Comparte los resultados por WhatsApp o agenda las sesiones en tu calendario.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Botón WhatsApp */}
+          <button
+            onClick={handleCopyWhatsApp}
+            className="flex-1 sm:flex-initial px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-950/40 active:scale-95"
+          >
+            <Copy className="w-4 h-4" />
+            {copiedWhatsApp ? "¡Resumen Copiado!" : "Copiar para WhatsApp"}
+          </button>
+
+          {/* Botón Google Calendar (para la primera fecha con quórum o dropdown) */}
+          {confirmedDates.length > 0 ? (
+            <a
+              href={generateGoogleCalendarUrl(poll.title, confirmedDates[0])}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 sm:flex-initial px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 rounded-xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all border border-zinc-700 active:scale-95"
+            >
+              <CalendarPlus className="w-4 h-4 text-blue-400" />
+              Google Calendar
+              <ExternalLink className="w-3 h-3 text-zinc-400" />
+            </a>
+          ) : (
+            <button
+              disabled
+              className="flex-1 sm:flex-initial px-4 py-2.5 bg-zinc-800/50 text-zinc-500 rounded-xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 cursor-not-allowed border border-zinc-800"
+              title="Disponible cuando haya al menos 1 fecha con quórum 100%"
+            >
+              <CalendarPlus className="w-4 h-4" />
+              Google Calendar
+            </button>
+          )}
+
+          {/* Botón iCalendar (.ics) */}
+          <button
+            onClick={handleDownloadIcs}
+            disabled={confirmedDates.length === 0}
+            className={`flex-1 sm:flex-initial px-4 py-2.5 rounded-xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all border ${
+              confirmedDates.length > 0
+                ? "bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border-zinc-700 active:scale-95"
+                : "bg-zinc-800/50 text-zinc-500 border-zinc-800 cursor-not-allowed"
+            }`}
+          >
+            <Download className="w-4 h-4" />
+            Descargar .ics
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
