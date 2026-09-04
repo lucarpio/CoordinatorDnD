@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import confetti from "canvas-confetti";
 import {
   Calendar as CalendarIcon,
@@ -17,6 +17,7 @@ import {
   CalendarPlus,
   Shield,
   Dices,
+  Loader2,
 } from "lucide-react";
 import { Poll, AvailabilityMap } from "@/lib/supabase";
 import {
@@ -49,10 +50,61 @@ export default function MonthScheduler({
   const [copiedWhatsApp, setCopiedWhatsApp] = useState<boolean>(false);
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
 
+  // Referencias para evitar condiciones de carrera en clics rápidos y sincronización
+  const availabilityRef = useRef<AvailabilityMap>(initialPoll.availability);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isSavingRef = useRef<boolean>(false);
+  const pendingSaveRef = useRef<AvailabilityMap | null>(null);
+  const selectedPlayerRef = useRef<string>(selectedPlayer);
+
+  useEffect(() => {
+    selectedPlayerRef.current = selectedPlayer;
+  }, [selectedPlayer]);
+
   // Sincronizar estado local con props entrantes (Realtime)
   useEffect(() => {
+    // Si tenemos clics pendientes de guardar o se están guardando localmente,
+    // fusionamos para preservar la selección activa del jugador actual sin que se borren
+    if (debounceTimerRef.current !== null || isSavingRef.current || pendingSaveRef.current !== null) {
+      const currentPlayer = selectedPlayerRef.current;
+      if (currentPlayer) {
+        const merged: AvailabilityMap = { ...initialPoll.availability };
+        const allDates = new Set([
+          ...Object.keys(availabilityRef.current),
+          ...Object.keys(merged),
+        ]);
+
+        allDates.forEach((date) => {
+          const localVoters = availabilityRef.current[date] || [];
+          const remoteVoters = merged[date] || [];
+          const localHasPlayer = localVoters.includes(currentPlayer);
+          const remoteHasPlayer = remoteVoters.includes(currentPlayer);
+
+          if (localHasPlayer && !remoteHasPlayer) {
+            merged[date] = [...remoteVoters, currentPlayer];
+          } else if (!localHasPlayer && remoteHasPlayer) {
+            merged[date] = remoteVoters.filter((p) => p !== currentPlayer);
+          }
+        });
+
+        availabilityRef.current = merged;
+        setPoll((prev) => ({ ...initialPoll, availability: merged }));
+        return;
+      }
+    }
+
+    availabilityRef.current = initialPoll.availability;
     setPoll(initialPoll);
   }, [initialPoll]);
+
+  // Limpiar timer de debounce al desmontar
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
 
   // Recordar al jugador en localStorage
   useEffect(() => {
@@ -85,36 +137,71 @@ export default function MonthScheduler({
       .sort();
   }, [poll.availability, totalParticipants]);
 
-  // Alternar disponibilidad del jugador actual para una fecha
-  const toggleDateAvailability = async (dateStr: string) => {
+  // Función para ejecutar el guardado debounced a Supabase
+  const flushPendingSave = useCallback(async () => {
+    if (!pendingSaveRef.current || isSavingRef.current) return;
+
+    const dataToSave = pendingSaveRef.current;
+    pendingSaveRef.current = null;
+    isSavingRef.current = true;
+
+    try {
+      await onUpdateAvailability(dataToSave);
+    } finally {
+      isSavingRef.current = false;
+      if (pendingSaveRef.current) {
+        await flushPendingSave();
+      } else {
+        setIsUpdating(false);
+      }
+    }
+  }, [onUpdateAvailability]);
+
+  const triggerDebouncedSave = useCallback((newAvailability: AvailabilityMap) => {
+    pendingSaveRef.current = newAvailability;
+    setIsUpdating(true);
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    debounceTimerRef.current = setTimeout(() => {
+      debounceTimerRef.current = null;
+      flushPendingSave();
+    }, 350);
+  }, [flushPendingSave]);
+
+  // Alternar disponibilidad del jugador actual para una fecha de manera inmediata y fluida
+  const toggleDateAvailability = (dateStr: string) => {
     if (!selectedPlayer) {
-      // Si no ha seleccionado jugador, resaltar o avisar
       alert("Por favor selecciona tu nombre en el selector superior antes de votar.");
       return;
     }
 
-    const currentVoters = poll.availability[dateStr] || [];
+    // Leemos de availabilityRef.current para garantizar que NUNCA usamos un snapshot desactualizado
+    const currentAvailability = availabilityRef.current;
+    const currentVoters = currentAvailability[dateStr] || [];
     const isCurrentlyAvailable = currentVoters.includes(selectedPlayer);
 
-    let updatedVoters: string[];
-    if (isCurrentlyAvailable) {
-      updatedVoters = currentVoters.filter((name) => name !== selectedPlayer);
-    } else {
-      updatedVoters = [...currentVoters, selectedPlayer];
-    }
+    const updatedVoters = isCurrentlyAvailable
+      ? currentVoters.filter((name) => name !== selectedPlayer)
+      : [...currentVoters, selectedPlayer];
 
-    const newAvailability: AvailabilityMap = {
-      ...poll.availability,
+    const nextAvailability: AvailabilityMap = {
+      ...currentAvailability,
       [dateStr]: updatedVoters,
     };
 
-    // Actualización optimista
+    // 1. Actualizamos la referencia sincrónicamente al instante
+    availabilityRef.current = nextAvailability;
+
+    // 2. Actualizamos el estado de React inmediatamente para respuesta visual instantánea
     setPoll((prev) => ({
       ...prev,
-      availability: newAvailability,
+      availability: nextAvailability,
     }));
 
-    // Si con este voto se alcanza el 100% de quórum, ¡celebración con confeti!
+    // 3. Celebración con confeti si con este voto se alcanza el 100% de quórum
     if (!isCurrentlyAvailable && updatedVoters.length === totalParticipants && totalParticipants > 0) {
       confetti({
         particleCount: 120,
@@ -124,10 +211,10 @@ export default function MonthScheduler({
       });
     }
 
-    setIsUpdating(true);
-    await onUpdateAvailability(newAvailability);
-    setIsUpdating(false);
+    // 4. Guardado debounced (agrupa clics seguidos en una sola petición)
+    triggerDebouncedSave(nextAvailability);
   };
+
 
   const handleCopyWhatsApp = () => {
     const currentUrl = typeof window !== "undefined" ? window.location.href : "";
@@ -202,6 +289,12 @@ export default function MonthScheduler({
                 <span className="text-xs text-zinc-400">
                   {isRealtimeConnected ? "En vivo" : "Conectando..."}
                 </span>
+                {isUpdating && (
+                  <span className="flex items-center gap-1 text-xs text-amber-400 font-medium ml-2 animate-pulse">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Guardando...
+                  </span>
+                )}
               </div>
             </div>
           </div>
