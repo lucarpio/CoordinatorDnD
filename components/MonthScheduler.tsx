@@ -13,6 +13,7 @@ import {
   Radio,
   ExternalLink,
   ChevronRight,
+  ChevronDown,
   Info,
   CalendarPlus,
   Shield,
@@ -49,6 +50,21 @@ export default function MonthScheduler({
   const [activeDayModal, setActiveDayModal] = useState<CalendarDay | null>(null);
   const [copiedWhatsApp, setCopiedWhatsApp] = useState<boolean>(false);
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
+  const [showGoogleDropdown, setShowGoogleDropdown] = useState<boolean>(false);
+  const googleDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Cerrar dropdown de Google Calendar al hacer clic fuera
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (googleDropdownRef.current && !googleDropdownRef.current.contains(event.target as Node)) {
+        setShowGoogleDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   // Referencias para evitar condiciones de carrera en clics rápidos y sincronización
   const availabilityRef = useRef<AvailabilityMap>(initialPoll.availability);
@@ -345,12 +361,24 @@ export default function MonthScheduler({
                 {confirmedDates.length === 1 ? "fecha confirmada" : "fechas confirmadas"} con Quórum
                 Total (100%)!
               </h4>
-              <p className="text-xs sm:text-sm text-emerald-200/80">
-                Todos los {totalParticipants} miembros pueden jugar en:{" "}
-                <span className="font-semibold text-emerald-100">
-                  {confirmedDates.map((d) => formatFriendlyDate(d)).join(" | ")}
+              <div className="text-xs sm:text-sm text-emerald-200/80 mt-1">
+                <span>Todos los {totalParticipants} miembros pueden jugar en: </span>
+                <span className="inline-flex flex-wrap items-center gap-1.5 mt-1 sm:mt-0">
+                  {confirmedDates.map((d) => (
+                    <a
+                      key={d}
+                      href={generateGoogleCalendarUrl(poll.title, d)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Clic para agendar esta fecha en Google Calendar"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-900/80 hover:bg-emerald-800 border border-emerald-500/40 text-emerald-100 font-semibold text-xs transition-all hover:scale-105"
+                    >
+                      <span>{formatFriendlyDate(d)}</span>
+                      <CalendarPlus className="w-3 h-3 text-emerald-300" />
+                    </a>
+                  ))}
                 </span>
-              </p>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -611,19 +639,8 @@ export default function MonthScheduler({
             {copiedWhatsApp ? "¡Resumen Copiado!" : "Copiar para WhatsApp"}
           </button>
 
-          {/* Botón Google Calendar (para la primera fecha con quórum o dropdown) */}
-          {confirmedDates.length > 0 ? (
-            <a
-              href={generateGoogleCalendarUrl(poll.title, confirmedDates[0])}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 sm:flex-initial px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 rounded-xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all border border-zinc-700 active:scale-95"
-            >
-              <CalendarPlus className="w-4 h-4 text-blue-400" />
-              Google Calendar
-              <ExternalLink className="w-3 h-3 text-zinc-400" />
-            </a>
-          ) : (
+          {/* Botón Google Calendar: directo para 1 fecha o dropdown inteligente para múltiples fechas */}
+          {confirmedDates.length === 0 ? (
             <button
               disabled
               className="flex-1 sm:flex-initial px-4 py-2.5 bg-zinc-800/50 text-zinc-500 rounded-xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 cursor-not-allowed border border-zinc-800"
@@ -632,6 +649,84 @@ export default function MonthScheduler({
               <CalendarPlus className="w-4 h-4" />
               Google Calendar
             </button>
+          ) : confirmedDates.length === 1 ? (
+            <a
+              href={generateGoogleCalendarUrl(poll.title, confirmedDates[0])}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 sm:flex-initial px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 rounded-xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all border border-zinc-700 active:scale-95 shadow-sm"
+              title={`Agendar ${formatFriendlyDate(confirmedDates[0])}`}
+            >
+              <CalendarPlus className="w-4 h-4 text-blue-400" />
+              <span>Google Calendar</span>
+              <ExternalLink className="w-3 h-3 text-zinc-400" />
+            </a>
+          ) : (
+            <div className="relative flex-1 sm:flex-initial" ref={googleDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setShowGoogleDropdown((prev) => !prev)}
+                className="w-full px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 rounded-xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all border border-zinc-700 active:scale-95 shadow-sm"
+              >
+                <CalendarPlus className="w-4 h-4 text-blue-400" />
+                <span>Google Calendar ({confirmedDates.length})</span>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-zinc-400 transition-transform duration-200 ${
+                    showGoogleDropdown ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+
+              {showGoogleDropdown && (
+                <div className="absolute bottom-full mb-2 right-0 sm:right-auto sm:left-0 z-40 w-72 sm:w-80 bg-zinc-950/95 border border-zinc-700 rounded-2xl shadow-2xl backdrop-blur-xl p-3 space-y-2">
+                  <div className="flex items-center justify-between pb-2 border-b border-zinc-800 text-xs">
+                    <span className="font-semibold text-zinc-200">Agendar en Google Calendar:</span>
+                    <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-bold text-[10px]">
+                      {confirmedDates.length} fechas
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                    {confirmedDates.map((date) => (
+                      <a
+                        key={date}
+                        href={generateGoogleCalendarUrl(poll.title, date)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => setShowGoogleDropdown(false)}
+                        className="flex items-center justify-between p-2 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 hover:border-blue-500/50 transition-all text-xs text-zinc-200 group"
+                      >
+                        <span className="font-medium text-zinc-300 group-hover:text-white">
+                          {formatFriendlyDate(date)}
+                        </span>
+                        <span className="flex items-center gap-1 text-[11px] text-blue-400 font-medium">
+                          Abrir <ExternalLink className="w-3 h-3" />
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+
+                  <div className="pt-2 border-t border-zinc-800 space-y-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        confirmedDates.forEach((date) => {
+                          window.open(generateGoogleCalendarUrl(poll.title, date), "_blank");
+                        });
+                        setShowGoogleDropdown(false);
+                      }}
+                      className="w-full py-1.5 px-3 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-98"
+                    >
+                      <CalendarPlus className="w-3.5 h-3.5" />
+                      Abrir todas las fechas en pestañas
+                    </button>
+                    <p className="text-[10px] text-zinc-400 text-center leading-tight">
+                      💡 Usa <strong className="text-zinc-300">&quot;Descargar .ics&quot;</strong> si prefieres importar todas juntas en 1 archivo.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {/* Botón iCalendar (.ics) */}
