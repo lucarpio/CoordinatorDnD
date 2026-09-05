@@ -261,11 +261,6 @@ export default function MonthScheduler({
     }
 
     if (!selectedPlayer) {
-      // Si está en modo espectador o no tiene personaje seleccionado, abrir modal de detalles del día
-      const targetDay = calendarDays.find((d) => d.dateString === dateStr);
-      if (targetDay) {
-        setActiveDayModal(targetDay);
-      }
       return;
     }
 
@@ -572,13 +567,29 @@ export default function MonthScheduler({
             return (
               <div
                 key={dateKey}
-                onClick={isPastDate ? undefined : () => toggleDateAvailability(dateKey)}
+                onClick={
+                  isPastDate || !selectedPlayer
+                    ? undefined
+                    : () => toggleDateAvailability(dateKey)
+                }
                 onMouseEnter={() => setHoveredDay(cellDay)}
                 onMouseLeave={() => setHoveredDay(null)}
-                title={isPastDate ? "Esta fecha ya pasó (no disponible para coordinar)" : undefined}
+                title={
+                  isPastDate
+                    ? "Esta fecha ya pasó (no disponible para coordinar)"
+                    : !selectedPlayer
+                    ? undefined
+                    : isSelectedPlayerVoted
+                    ? "Clic para desmarcar tu disponibilidad"
+                    : "Clic para marcar tu disponibilidad"
+                }
                 className={`group relative min-h-[90px] sm:min-h-[115px] p-2 sm:p-2.5 rounded-xl border transition-all duration-200 flex flex-col justify-between select-none ${
                   isPastDate
                     ? "bg-zinc-950/30 border-zinc-900/80 opacity-40 cursor-not-allowed"
+                    : !selectedPlayer
+                    ? isQuorumReached
+                      ? "bg-emerald-950/40 border-emerald-500/80 cursor-default"
+                      : "bg-zinc-950/70 border-zinc-800 cursor-default"
                     : isQuorumReached
                     ? "bg-emerald-950/50 border-emerald-500 hover:border-emerald-400 shadow-lg shadow-emerald-950/30 hover:shadow-emerald-900/50 cursor-pointer"
                     : isSelectedPlayerVoted
@@ -625,33 +636,36 @@ export default function MonthScheduler({
                   )}
                 </div>
 
-                {/* Badge central de Quórum (clic abre detalles del día) */}
-                <div
-                  className="my-auto py-1 flex justify-center cursor-pointer"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setActiveDayModal(cellDay);
-                  }}
-                  title="Clic para ver quiénes votaron este día"
-                >
-                  {isQuorumReached ? (
-                    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500 text-zinc-950 font-black text-xs sm:text-sm shadow-md shadow-emerald-500/30 animate-pulse hover:scale-105 transition-transform">
-                      <span>★</span>
-                      <span>
+                {/* Badge central de Quórum (ÚNICO elemento que abre el modal de detalle de asistencia) */}
+                <div className="my-auto py-1 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveDayModal(cellDay);
+                    }}
+                    title="Clic para ver quiénes votaron este día"
+                    className="cursor-pointer transition-transform hover:scale-105 active:scale-95 focus:outline-none"
+                  >
+                    {isQuorumReached ? (
+                      <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500 text-zinc-950 font-black text-xs sm:text-sm shadow-md shadow-emerald-500/30 animate-pulse hover:bg-emerald-400 transition-colors">
+                        <span>★</span>
+                        <span>
+                          {voterCount}/{totalParticipants}
+                        </span>
+                      </div>
+                    ) : (
+                      <div
+                        className={`inline-flex items-center px-1.5 sm:px-2 py-0.5 rounded-md font-bold text-[11px] sm:text-xs transition-colors ${
+                          voterCount > 0
+                            ? "bg-zinc-800 text-zinc-200 border border-zinc-700 hover:border-amber-500/60 hover:bg-zinc-700"
+                            : "bg-zinc-900/60 text-zinc-600 border border-zinc-800/50 hover:border-zinc-600 hover:text-zinc-400"
+                        }`}
+                      >
                         {voterCount}/{totalParticipants}
-                      </span>
-                    </div>
-                  ) : (
-                    <div
-                      className={`inline-flex items-center px-1.5 sm:px-2 py-0.5 rounded-md font-bold text-[11px] sm:text-xs hover:border-zinc-500 transition-colors ${
-                        voterCount > 0
-                          ? "bg-zinc-800 text-zinc-200 border border-zinc-700"
-                          : "bg-zinc-900/60 text-zinc-600 border border-zinc-800/50"
-                      }`}
-                    >
-                      {voterCount}/{totalParticipants}
-                    </div>
-                  )}
+                      </div>
+                    )}
+                  </button>
                 </div>
 
                 {/* Mini Barra de progreso visual */}
