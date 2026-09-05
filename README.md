@@ -49,6 +49,14 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=tu-anon-key-aqui
 
 ---
 
+## 🌐 Ambientes y Despliegue (Vercel)
+
+El proyecto cuenta con un flujo CI/CD multi-ambiente:
+- **Producción (`main`)**: Conectado a la base de datos de producción en Supabase para partidas reales.
+- **Preview (`preview`)**: Despliegue para pruebas y validación antes de publicar cambios, conectado a la base de datos de desarrollo.
+
+---
+
 ## 💻 Desarrollo Local
 
 Instalar dependencias:
