@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="16" fill="#090a0f"/>
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="none" stroke="#f59e0b" stroke-width="2" stroke-opacity="0.5"/>
+  <g transform="translate(32, 32)">
+    <!-- D20 Outer Hexagon -->
+    <polygon points="0,-22 19,-11 19,11 0,22 -19,11 -19,-11" fill="#18181b" stroke="#f59e0b" stroke-width="2.5" stroke-linejoin="round"/>
+    <!-- Inner faceted lines -->
+    <line x1="0" y1="-22" x2="0" y2="22" stroke="#f59e0b" stroke-width="1.8" stroke-opacity="0.8"/>
+    <line x1="-19" y1="-11" x2="19" y2="11" stroke="#f59e0b" stroke-width="1.8" stroke-opacity="0.8"/>
+    <line x1="-19" y1="11" x2="19" y2="-11" stroke="#f59e0b" stroke-width="1.8" stroke-opacity="0.8"/>
+    <!-- Center Face -->
+    <polygon points="0,-12 11,8 -11,8" fill="#f59e0b" fill-opacity="0.3" stroke="#fbbf24" stroke-width="1.8" stroke-linejoin="round"/>
+    <text x="0" y="3" fill="#fbbf24" font-family="system-ui, -apple-system, sans-serif" font-size="9" font-weight="900" text-anchor="middle">20</text>
+  </g>
+</svg>

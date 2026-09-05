@@ -19,13 +19,18 @@ import {
   Shield,
   Dices,
   Loader2,
+  Eye,
+  X,
 } from "lucide-react";
 import { Poll, AvailabilityMap } from "@/lib/supabase";
+import ClaimCharacterModal from "@/components/ClaimCharacterModal";
+import { saveCreatedPoll } from "@/lib/storage";
 import {
   getMonthDays,
   MONTH_NAMES_ES,
   WEEKDAYS_ES,
   formatFriendlyDate,
+  formatDateKey,
   generateWhatsAppSummary,
   generateGoogleCalendarUrl,
   generateIcsContent,
@@ -46,6 +51,8 @@ export default function MonthScheduler({
 }: MonthSchedulerProps) {
   const [poll, setPoll] = useState<Poll>(initialPoll);
   const [selectedPlayer, setSelectedPlayer] = useState<string>("");
+  const [showClaimModal, setShowClaimModal] = useState<boolean>(false);
+  const [isSpectator, setIsSpectator] = useState<boolean>(false);
   const [hoveredDay, setHoveredDay] = useState<CalendarDay | null>(null);
   const [activeDayModal, setActiveDayModal] = useState<CalendarDay | null>(null);
   const [copiedWhatsApp, setCopiedWhatsApp] = useState<boolean>(false);
@@ -122,21 +129,58 @@ export default function MonthScheduler({
     };
   }, []);
 
-  // Recordar al jugador en localStorage
+  // Recordar al jugador en localStorage o invitar a reclamar personaje
   useEffect(() => {
     const storageKey = `dnd_player_${poll.slug}`;
     const savedPlayer = localStorage.getItem(storageKey);
     if (savedPlayer && poll.participants.includes(savedPlayer)) {
       setSelectedPlayer(savedPlayer);
+    } else {
+      const isSpectatorSession = sessionStorage.getItem(`dnd_spectator_${poll.slug}`);
+      if (isSpectatorSession) {
+        setIsSpectator(true);
+      } else {
+        setShowClaimModal(true);
+      }
     }
   }, [poll.slug, poll.participants]);
 
-  const handlePlayerChange = (player: string) => {
+  const handleClaimPlayer = (player: string) => {
     setSelectedPlayer(player);
-    if (player) {
-      localStorage.setItem(`dnd_player_${poll.slug}`, player);
-    }
+    setIsSpectator(false);
+    setShowClaimModal(false);
+    localStorage.setItem(`dnd_player_${poll.slug}`, player);
+    sessionStorage.removeItem(`dnd_spectator_${poll.slug}`);
+
+    // Guardar / actualizar en "Mis Mesas" para que el jugador nunca pierda el acceso
+    saveCreatedPoll({
+      slug: poll.slug,
+      title: poll.title,
+      year: poll.year,
+      month: poll.month,
+      createdAt: poll.created_at || new Date().toISOString(),
+      participantsCount: poll.participants.length,
+      myCharacter: player,
+    });
   };
+
+  const handleEnterAsSpectator = () => {
+    setSelectedPlayer("");
+    setIsSpectator(true);
+    setShowClaimModal(false);
+    sessionStorage.setItem(`dnd_spectator_${poll.slug}`, "true");
+  };
+
+  const handleOpenClaimModal = () => {
+    setShowClaimModal(true);
+  };
+
+  const playerMarkedDatesCount = useMemo(() => {
+    if (!selectedPlayer) return 0;
+    return Object.values(poll.availability || {}).filter(
+      (voters) => voters && voters.includes(selectedPlayer)
+    ).length;
+  }, [poll.availability, selectedPlayer]);
 
   const calendarDays = useMemo(() => {
     return getMonthDays(poll.year, poll.month);
@@ -187,10 +231,20 @@ export default function MonthScheduler({
     }, 350);
   }, [flushPendingSave]);
 
+  const todayDateStr = formatDateKey(new Date());
+
   // Alternar disponibilidad del jugador actual para una fecha de manera inmediata y fluida
   const toggleDateAvailability = (dateStr: string) => {
+    if (dateStr < todayDateStr) {
+      return;
+    }
+
     if (!selectedPlayer) {
-      alert("Por favor selecciona tu nombre en el selector superior antes de votar.");
+      // Si está en modo espectador o no tiene personaje seleccionado, abrir modal de detalles del día
+      const targetDay = calendarDays.find((d) => d.dateString === dateStr);
+      if (targetDay) {
+        setActiveDayModal(targetDay);
+      }
       return;
     }
 
@@ -315,34 +369,72 @@ export default function MonthScheduler({
             </div>
           </div>
 
-          {/* Selector "¿Quién eres?" */}
-          <div className="bg-zinc-950/80 border border-zinc-800 rounded-xl p-3 sm:p-4 min-w-[280px]">
-            <label className="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wider flex items-center gap-1.5">
-              <Shield className="w-3.5 h-3.5 text-amber-400" />
-              ¿Quién eres en la mesa?
-            </label>
-            <select
-              value={selectedPlayer}
-              onChange={(e) => handlePlayerChange(e.target.value)}
-              className="w-full bg-zinc-900 text-zinc-100 border border-zinc-700 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all cursor-pointer"
-            >
-              <option value="">-- Elige tu personaje / nombre --</option>
-              {poll.participants.map((player) => (
-                <option key={player} value={player}>
-                  {player}
-                </option>
-              ))}
-            </select>
-            {!selectedPlayer ? (
-              <p className="text-[11px] text-amber-400/90 mt-1.5 flex items-center gap-1">
-                <Info className="w-3 h-3 flex-shrink-0" />
-                Selecciona tu nombre para marcar tus días disponibles.
-              </p>
+          {/* Tarjeta de Identidad del Jugador / Modo Espectador */}
+          <div className="bg-zinc-950/80 border border-zinc-800/90 rounded-2xl p-3.5 sm:p-4 min-w-[280px] sm:min-w-[320px] shadow-lg">
+            {selectedPlayer ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Shield className="w-3.5 h-3.5 text-amber-400" />
+                    Tu Calendario Personal
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleOpenClaimModal}
+                    className="text-[11px] font-semibold text-zinc-400 hover:text-amber-400 underline decoration-zinc-700 hover:decoration-amber-400 transition-colors"
+                  >
+                    Cambiar
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 bg-zinc-900/90 border border-zinc-800/80 rounded-xl px-3 py-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-lg bg-amber-500 text-zinc-950 font-black flex items-center justify-center text-sm shadow-sm flex-shrink-0">
+                      {selectedPlayer.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="truncate">
+                      <span className="text-sm font-extrabold text-zinc-100 truncate block">
+                        {selectedPlayer}
+                      </span>
+                      <span className="text-[11px] text-zinc-400">
+                        {playerMarkedDatesCount} {playerMarkedDatesCount === 1 ? "día marcado" : "días marcados"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <span className="text-[11px] px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-bold flex-shrink-0">
+                    Votando
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-zinc-400 flex items-center gap-1 pt-0.5">
+                  <Check className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                  <span>Toca cualquier día para marcar tu disponibilidad.</span>
+                </p>
+              </div>
             ) : (
-              <p className="text-[11px] text-emerald-400 mt-1.5 flex items-center gap-1">
-                <Check className="w-3 h-3" />
-                Interactuando como <strong className="font-semibold">{selectedPlayer}</strong>
-              </p>
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Eye className="w-3.5 h-3.5 text-zinc-400" />
+                    Modo Espectador
+                  </span>
+                </div>
+
+                <div className="bg-zinc-900/90 border border-zinc-800/80 rounded-xl px-3 py-2 flex items-center justify-between gap-2.5">
+                  <div className="min-w-0 pr-1">
+                    <p className="text-xs font-semibold text-zinc-200 truncate">Solo visualización</p>
+                    <p className="text-[10px] text-zinc-500 truncate">Consulta la disponibilidad general</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleOpenClaimModal}
+                    className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 rounded-lg text-xs font-bold transition-all shadow-md flex-shrink-0 active:scale-95"
+                  >
+                    Elegir personaje
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -443,6 +535,7 @@ export default function MonthScheduler({
             const isQuorumReached = voterCount >= totalParticipants && totalParticipants > 0;
             const isSelectedPlayerVoted = selectedPlayer ? voters.includes(selectedPlayer) : false;
             const percentage = totalParticipants > 0 ? (voterCount / totalParticipants) * 100 : 0;
+            const isPastDate = cellDay.dateString < todayDateStr;
 
             if (!cellDay.isCurrentMonth) {
               return (
@@ -458,22 +551,27 @@ export default function MonthScheduler({
             return (
               <div
                 key={dateKey}
-                onClick={() => toggleDateAvailability(dateKey)}
+                onClick={isPastDate ? undefined : () => toggleDateAvailability(dateKey)}
                 onMouseEnter={() => setHoveredDay(cellDay)}
                 onMouseLeave={() => setHoveredDay(null)}
-                className={`group relative min-h-[90px] sm:min-h-[115px] p-2 sm:p-2.5 rounded-xl border transition-all duration-200 cursor-pointer flex flex-col justify-between select-none ${
-                  isQuorumReached
-                    ? "bg-emerald-950/50 border-emerald-500 hover:border-emerald-400 shadow-lg shadow-emerald-950/30 hover:shadow-emerald-900/50"
+                title={isPastDate ? "Esta fecha ya pasó (no disponible para coordinar)" : undefined}
+                className={`group relative min-h-[90px] sm:min-h-[115px] p-2 sm:p-2.5 rounded-xl border transition-all duration-200 flex flex-col justify-between select-none ${
+                  isPastDate
+                    ? "bg-zinc-950/30 border-zinc-900/80 opacity-40 cursor-not-allowed"
+                    : isQuorumReached
+                    ? "bg-emerald-950/50 border-emerald-500 hover:border-emerald-400 shadow-lg shadow-emerald-950/30 hover:shadow-emerald-900/50 cursor-pointer"
                     : isSelectedPlayerVoted
-                    ? "bg-amber-950/30 border-amber-500/60 hover:border-amber-400"
-                    : "bg-zinc-950/70 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/40"
+                    ? "bg-amber-950/30 border-amber-500/60 hover:border-amber-400 cursor-pointer"
+                    : "bg-zinc-950/70 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/40 cursor-pointer"
                 }`}
               >
                 {/* Cabecera de celda: Día + Checkbox de usuario */}
                 <div className="flex items-center justify-between">
                   <span
                     className={`text-xs sm:text-sm font-bold ${
-                      isQuorumReached
+                      isPastDate
+                        ? "text-zinc-600"
+                        : isQuorumReached
                         ? "text-emerald-300"
                         : cellDay.isWeekend
                         ? "text-amber-400"
@@ -483,29 +581,40 @@ export default function MonthScheduler({
                     {cellDay.dayNumber}
                   </span>
 
-                  {/* Indicador de si el jugador activo votó este día */}
-                  {selectedPlayer && (
-                    <span
-                      title={
-                        isSelectedPlayerVoted
-                          ? "Marcaste disponible este día (clic para quitar)"
-                          : "No has marcado este día (clic para marcar)"
-                      }
-                      className={`w-4 h-4 rounded-md flex items-center justify-center transition-all ${
-                        isSelectedPlayerVoted
-                          ? "bg-amber-500 text-zinc-950 shadow-sm"
-                          : "border border-zinc-700 group-hover:border-zinc-500"
-                      }`}
-                    >
-                      {isSelectedPlayerVoted && <Check className="w-3 h-3 stroke-[3]" />}
-                    </span>
+                  {/* Indicador de si el día es pasado o si el jugador votó */}
+                  {isPastDate ? (
+                    <span className="text-[10px] text-zinc-600 font-medium">Pasado</span>
+                  ) : (
+                    selectedPlayer && (
+                      <span
+                        title={
+                          isSelectedPlayerVoted
+                            ? "Marcaste disponible este día (clic para quitar)"
+                            : "No has marcado este día (clic para marcar)"
+                        }
+                        className={`w-4 h-4 rounded-md flex items-center justify-center transition-all ${
+                          isSelectedPlayerVoted
+                            ? "bg-amber-500 text-zinc-950 shadow-sm"
+                            : "border border-zinc-700 group-hover:border-zinc-500"
+                        }`}
+                      >
+                        {isSelectedPlayerVoted && <Check className="w-3 h-3 stroke-[3]" />}
+                      </span>
+                    )
                   )}
                 </div>
 
-                {/* Badge central de Quórum */}
-                <div className="my-auto py-1 flex justify-center">
+                {/* Badge central de Quórum (clic abre detalles del día) */}
+                <div
+                  className="my-auto py-1 flex justify-center cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveDayModal(cellDay);
+                  }}
+                  title="Clic para ver quiénes votaron este día"
+                >
                   {isQuorumReached ? (
-                    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500 text-zinc-950 font-black text-xs sm:text-sm shadow-md shadow-emerald-500/30 animate-pulse">
+                    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500 text-zinc-950 font-black text-xs sm:text-sm shadow-md shadow-emerald-500/30 animate-pulse hover:scale-105 transition-transform">
                       <span>★</span>
                       <span>
                         {voterCount}/{totalParticipants}
@@ -513,7 +622,7 @@ export default function MonthScheduler({
                     </div>
                   ) : (
                     <div
-                      className={`inline-flex items-center px-1.5 sm:px-2 py-0.5 rounded-md font-bold text-[11px] sm:text-xs ${
+                      className={`inline-flex items-center px-1.5 sm:px-2 py-0.5 rounded-md font-bold text-[11px] sm:text-xs hover:border-zinc-500 transition-colors ${
                         voterCount > 0
                           ? "bg-zinc-800 text-zinc-200 border border-zinc-700"
                           : "bg-zinc-900/60 text-zinc-600 border border-zinc-800/50"
@@ -744,6 +853,135 @@ export default function MonthScheduler({
           </button>
         </div>
       </div>
+
+      {/* Modal de Detalle de Día */}
+      {activeDayModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md bg-[#0e1017] border border-zinc-800 rounded-2xl p-6 shadow-2xl space-y-5">
+            <button
+              onClick={() => setActiveDayModal(null)}
+              className="absolute top-4 right-4 p-2 text-zinc-500 hover:text-zinc-300 rounded-xl hover:bg-zinc-800 transition-colors"
+              title="Cerrar"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div>
+              <div className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+                Detalle de Disponibilidad
+              </div>
+              <h3 className="text-xl font-bold text-zinc-100 mt-1">
+                {formatFriendlyDate(activeDayModal.dateString)}
+              </h3>
+            </div>
+
+            {/* Votantes */}
+            {(() => {
+              const voters = poll.availability[activeDayModal.dateString] || [];
+              const voterCount = voters.length;
+              const isQuorum = voterCount >= totalParticipants && totalParticipants > 0;
+              const missingPlayers = poll.participants.filter((p) => !voters.includes(p));
+
+              return (
+                <div className="space-y-4 text-xs">
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-950/60 border border-zinc-800/80">
+                    <span className="font-semibold text-zinc-300">Quórum de la mesa:</span>
+                    <span
+                      className={`font-bold px-2.5 py-1 rounded-lg ${
+                        isQuorum
+                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                          : "bg-zinc-800 text-zinc-400 border border-zinc-700"
+                      }`}
+                    >
+                      {voterCount} de {totalParticipants} confirmados ({Math.round((voterCount / (totalParticipants || 1)) * 100)}%)
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <span className="font-semibold text-zinc-400 uppercase tracking-wider block text-[11px]">
+                      Disponibles ({voterCount}):
+                    </span>
+                    {voterCount > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {voters.map((name) => (
+                          <span
+                            key={name}
+                            className="px-2.5 py-1 rounded-lg bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 font-medium"
+                          >
+                            ✓ {name}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-zinc-500 italic">Nadie ha marcado disponible aún.</p>
+                    )}
+                  </div>
+
+                  {missingPlayers.length > 0 && (
+                    <div className="space-y-2 pt-1">
+                      <span className="font-semibold text-zinc-500 uppercase tracking-wider block text-[11px]">
+                        Faltan por confirmar ({missingPlayers.length}):
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {missingPlayers.map((name) => (
+                          <span
+                            key={name}
+                            className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-500 font-medium"
+                          >
+                            {name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Si el usuario tiene personaje seleccionado y el día no ha pasado, botón directo de votar */}
+                  {selectedPlayer && activeDayModal.dateString >= todayDateStr && (
+                    <div className="pt-3 border-t border-zinc-800">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          toggleDateAvailability(activeDayModal.dateString);
+                        }}
+                        className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 ${
+                          voters.includes(selectedPlayer)
+                            ? "bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300"
+                            : "bg-amber-500 hover:bg-amber-400 text-zinc-950"
+                        }`}
+                      >
+                        {voters.includes(selectedPlayer) ? (
+                          <>
+                            <X className="w-4 h-4" />
+                            Quitar mi disponibilidad
+                          </>
+                        ) : (
+                          <>
+                            <Check className="w-4 h-4" />
+                            Marcarme como disponible
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Reclamo de Personaje */}
+      <ClaimCharacterModal
+        isOpen={showClaimModal}
+        onClose={() => setShowClaimModal(false)}
+        campaignTitle={poll.title}
+        participants={poll.participants}
+        availability={poll.availability}
+        currentSelectedPlayer={selectedPlayer}
+        onSelectPlayer={handleClaimPlayer}
+        onEnterAsSpectator={handleEnterAsSpectator}
+        canDismiss={Boolean(selectedPlayer || isSpectator)}
+      />
     </div>
   );
 }

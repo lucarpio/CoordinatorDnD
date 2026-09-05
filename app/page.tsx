@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Dices,
   Calendar,
@@ -14,9 +15,11 @@ import {
   AlertCircle,
   Plus,
   X,
+  BookmarkCheck,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { MONTH_NAMES_ES } from "@/lib/calendarUtils";
+import { saveCreatedPoll, getSavedPolls, SavedPoll } from "@/lib/storage";
 
 export default function Home() {
   const router = useRouter();
@@ -31,12 +34,8 @@ export default function Home() {
   const [year, setYear] = useState<number>(currentYear);
   const [month, setMonth] = useState<number>(currentMonth);
   const [participantInput, setParticipantInput] = useState<string>("");
-  const [participants, setParticipants] = useState<string[]>([
-    "DM",
-    "Jugador 1",
-    "Jugador 2",
-    "Jugador 3",
-  ]);
+  const [participants, setParticipants] = useState<string[]>([]);
+  const [savedPolls, setSavedPolls] = useState<SavedPoll[]>([]);
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
@@ -45,6 +44,40 @@ export default function Home() {
     title: string;
   } | null>(null);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
+
+  // Cargar mesas creadas guardadas localmente
+  useEffect(() => {
+    const list = getSavedPolls();
+    setSavedPolls(list);
+
+    const handleUpdate = () => {
+      setSavedPolls(getSavedPolls());
+    };
+    window.addEventListener("saved_polls_updated", handleUpdate);
+    return () => {
+      window.removeEventListener("saved_polls_updated", handleUpdate);
+    };
+  }, []);
+
+  // Meses disponibles según el año seleccionado (no muestra meses pasados en el año actual)
+  const availableMonths = useMemo(() => {
+    return MONTH_NAMES_ES.map((name, idx) => ({
+      index: idx + 1,
+      name,
+    })).filter((m) => {
+      if (year === currentYear) {
+        return m.index >= currentMonth;
+      }
+      return true;
+    });
+  }, [year, currentYear, currentMonth]);
+
+  // Si cambia el año y el mes seleccionado quedó en el pasado, resetear al mes actual
+  useEffect(() => {
+    if (year === currentYear && month < currentMonth) {
+      setMonth(currentMonth);
+    }
+  }, [year, currentYear, currentMonth, month]);
 
   // Manejadores de lista de participantes
   const handleAddParticipant = () => {
@@ -116,6 +149,15 @@ export default function Home() {
       if (error) {
         throw new Error(error.message);
       }
+
+      saveCreatedPoll({
+        slug,
+        title: title.trim(),
+        year,
+        month,
+        createdAt: new Date().toISOString(),
+        participantsCount: participants.length,
+      });
 
       setCreatedRoom({ slug, title: title.trim() });
     } catch (err: any) {
@@ -250,9 +292,9 @@ export default function Home() {
                 onChange={(e) => setMonth(Number(e.target.value))}
                 className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all cursor-pointer"
               >
-                {MONTH_NAMES_ES.map((name, idx) => (
-                  <option key={name} value={idx + 1}>
-                    {name}
+                {availableMonths.map((m) => (
+                  <option key={m.index} value={m.index}>
+                    {m.name}
                   </option>
                 ))}
               </select>
@@ -284,7 +326,7 @@ export default function Home() {
                 Participantes de la mesa (Total: {participants.length})
               </span>
               <span className="text-[11px] text-zinc-500 font-normal">
-                (Incluye al DM y los jugadores)
+                (Mínimo 2: DM y jugadores)
               </span>
             </label>
 
@@ -308,23 +350,29 @@ export default function Home() {
             </div>
 
             {/* Tags de participantes */}
-            <div className="flex flex-wrap gap-2 pt-1">
-              {participants.map((name) => (
-                <span
-                  key={name}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs font-medium"
-                >
-                  {name}
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveParticipant(name)}
-                    className="text-zinc-500 hover:text-red-400 transition-colors"
+            {participants.length === 0 ? (
+              <div className="p-3.5 rounded-xl border border-dashed border-zinc-800 bg-zinc-950/40 text-center text-xs text-zinc-500">
+                Aún no has agregado participantes. Escribe el nombre o personaje arriba y pulsa Enter o Agregar.
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {participants.map((name) => (
+                  <span
+                    key={name}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs font-medium"
                   >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </span>
-              ))}
-            </div>
+                    {name}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveParticipant(name)}
+                      className="text-zinc-500 hover:text-red-400 transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="pt-2">
@@ -338,6 +386,50 @@ export default function Home() {
             </button>
           </div>
         </form>
+      )}
+
+      {/* Sección de acceso directo a Mesas Guardadas si existen */}
+      {savedPolls.length > 0 && (
+        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-5 sm:p-6 backdrop-blur-md space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <BookmarkCheck className="w-5 h-5 text-amber-400" />
+              <h2 className="text-base sm:text-lg font-bold text-zinc-100">
+                Tus Mesas Creadas ({savedPolls.length})
+              </h2>
+            </div>
+            <Link
+              href="/mis-mesas"
+              className="text-xs font-semibold text-amber-400 hover:text-amber-300 flex items-center gap-1 transition-colors"
+            >
+              Ver todas
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {savedPolls.slice(0, 4).map((poll) => {
+              const monthName = MONTH_NAMES_ES[poll.month - 1] || "Mes";
+              return (
+                <Link
+                  key={poll.slug}
+                  href={`/m/${poll.slug}`}
+                  className="p-3.5 rounded-xl bg-zinc-950/70 border border-zinc-800 hover:border-amber-500/50 hover:bg-zinc-900/80 transition-all group flex items-center justify-between"
+                >
+                  <div className="min-w-0 pr-3">
+                    <p className="text-sm font-semibold text-zinc-200 group-hover:text-amber-400 truncate transition-colors">
+                      {poll.title}
+                    </p>
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      {monthName} {poll.year}
+                    </p>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-zinc-600 group-hover:text-amber-400 flex-shrink-0 transition-colors" />
+                </Link>
+              );
+            })}
+          </div>
+        </div>
       )}
     </div>
   );

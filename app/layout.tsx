@@ -1,9 +1,51 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import HeaderNav from "@/components/HeaderNav";
 
 export const metadata: Metadata = {
-  title: "Coordinator DnD | Encuentra la fecha perfecta para tu sesión",
-  description: "Coordinador mensual de sesiones de Dungeons & Dragons con quórum estricto y cero fricción.",
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL || "https://coordinator-dnd.vercel.app"
+  ),
+  title: {
+    default: "Coordinator DnD | Encuentra la fecha perfecta para tu sesión",
+    template: "%s | CoordinatorDnD",
+  },
+  description:
+    "Coordinador mensual de sesiones de Dungeons & Dragons con quórum estricto (100%) y sincronización en tiempo real.",
+  keywords: [
+    "D&D",
+    "Dungeons & Dragons",
+    "coordinador",
+    "sesiones",
+    "rol",
+    "calendario",
+    "quórum",
+  ],
+  authors: [{ name: "CoordinatorDnD" }],
+  openGraph: {
+    title: "Coordinator DnD | Encuentra la fecha perfecta para tu sesión",
+    description:
+      "Coordinador mensual de sesiones de Dungeons & Dragons con quórum estricto (100%) y sincronización en tiempo real.",
+    url: "https://coordinator-dnd.vercel.app",
+    siteName: "CoordinatorDnD",
+    locale: "es_ES",
+    type: "website",
+    images: [
+      {
+        url: "/og-image.jpg",
+        width: 1200,
+        height: 675,
+        alt: "CoordinatorDnD - Coordinador de sesiones de D&D",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Coordinator DnD | Encuentra la fecha perfecta para tu sesión",
+    description:
+      "Coordinador mensual de sesiones de Dungeons & Dragons con quórum estricto (100%) y sincronización en tiempo real.",
+    images: ["/og-image.jpg"],
+  },
 };
 
 export default function RootLayout({
@@ -24,10 +66,8 @@ export default function RootLayout({
                 Coordinator<span className="text-amber-400">DnD</span>
               </span>
             </a>
-            <div className="flex items-center gap-3 text-xs text-zinc-400">
-              <span className="hidden sm:inline-block px-2.5 py-1 rounded-full bg-zinc-900 border border-zinc-800">
-                ⚔️ Cero Login • Quórum 100%
-              </span>
+            <div className="flex items-center gap-3">
+              <HeaderNav />
             </div>
           </div>
         </header>
