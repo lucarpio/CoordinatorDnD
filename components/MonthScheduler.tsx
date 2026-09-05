@@ -60,18 +60,39 @@ export default function MonthScheduler({
   const [showGoogleDropdown, setShowGoogleDropdown] = useState<boolean>(false);
   const googleDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Cerrar dropdown de Google Calendar al hacer clic fuera
+  // Cerrar dropdown de Google Calendar al hacer clic fuera o presionar Escape
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (googleDropdownRef.current && !googleDropdownRef.current.contains(event.target as Node)) {
         setShowGoogleDropdown(false);
       }
     }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setShowGoogleDropdown(false);
+      }
+    }
     document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("keydown", handleKeyDown);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
+
+  // Cerrar modal de detalle de día al presionar Escape
+  useEffect(() => {
+    if (!activeDayModal) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setActiveDayModal(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [activeDayModal]);
 
   // Referencias para evitar condiciones de carrera en clics rápidos y sincronización
   const availabilityRef = useRef<AvailabilityMap>(initialPoll.availability);
@@ -856,8 +877,18 @@ export default function MonthScheduler({
 
       {/* Modal de Detalle de Día */}
       {activeDayModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="relative w-full max-w-md bg-[#0e1017] border border-zinc-800 rounded-2xl p-6 shadow-2xl space-y-5">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setActiveDayModal(null);
+            }
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-md bg-[#0e1017] border border-zinc-800 rounded-2xl p-6 shadow-2xl space-y-5 cursor-default"
+          >
             <button
               onClick={() => setActiveDayModal(null)}
               className="absolute top-4 right-4 p-2 text-zinc-500 hover:text-zinc-300 rounded-xl hover:bg-zinc-800 transition-colors"
