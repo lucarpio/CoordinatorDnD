@@ -192,13 +192,13 @@ export default function Home() {
     <div className="max-w-3xl mx-auto space-y-10">
       {/* Hero Section */}
       <div className="text-center space-y-4 pt-4">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold tracking-wide">
-          <Sparkles className="w-3.5 h-3.5" />
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full liquid-glass-subtle text-amber-300 text-xs font-semibold tracking-wide border border-white/10 shadow-sm">
+          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
           Coordinación Sin Fricción • Zero Login
         </div>
         <h1 className="text-3xl sm:text-5xl font-extrabold text-zinc-100 tracking-tight">
           Encuentra la fecha de tu próxima{" "}
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-600">
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 drop-shadow-sm">
             Sesión de D&D
           </span>
         </h1>
@@ -210,19 +210,21 @@ export default function Home() {
 
       {/* Modal / Card de Éxito cuando se crea la sala */}
       {createdRoom ? (
-        <div className="bg-zinc-900/90 border border-emerald-500/40 rounded-2xl p-6 sm:p-8 backdrop-blur-md shadow-2xl space-y-6 animate-in fade-in zoom-in-95 duration-300">
+        <div className="liquid-glass-elevated rounded-3xl p-6 sm:p-8 space-y-6 animate-in fade-in zoom-in-95 duration-300 relative overflow-hidden">
+          <div className="absolute -right-16 -top-16 w-48 h-48 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
+          
           <div className="text-center space-y-2">
-            <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/30">
-              <Check className="w-6 h-6 stroke-[3]" />
+            <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-400/30 shadow-[inset_0_1px_1px_rgba(255,255,255,0.25)]">
+              <Check className="w-7 h-7 stroke-[3]" />
             </div>
-            <h2 className="text-2xl font-bold text-zinc-100">¡Sala Creada con Éxito!</h2>
+            <h2 className="text-2xl font-black text-zinc-100 tracking-tight">¡Sala Creada con Éxito!</h2>
             <p className="text-sm text-zinc-400">
               Campaña: <strong className="text-zinc-200">{createdRoom.title}</strong>
             </p>
           </div>
 
-          <div className="bg-zinc-950/80 border border-zinc-800 rounded-xl p-4 space-y-2">
-            <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider block">
+          <div className="liquid-glass-subtle rounded-2xl p-4 space-y-2 border border-white/10">
+            <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider block">
               Enlace único para tu grupo:
             </span>
             <div className="flex items-center gap-2">
@@ -230,22 +232,22 @@ export default function Home() {
                 type="text"
                 readOnly
                 value={getShareableUrl(createdRoom.slug)}
-                className="w-full bg-zinc-900 border border-zinc-700/80 rounded-lg px-3 py-2 text-xs sm:text-sm text-zinc-300 focus:outline-none"
+                className="w-full liquid-glass-input rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-zinc-200 focus:outline-none select-all"
               />
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex flex-col sm:flex-row gap-3 pt-1">
             <button
               onClick={handleCopyWhatsAppLink}
-              className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-950/40 active:scale-95"
+              className="flex-1 px-4 py-3.5 ios-btn-emerald text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
             >
               <Copy className="w-4 h-4" />
               {copiedLink ? "¡Mensaje Copiado para WhatsApp!" : "Copiar Enlace para WhatsApp"}
             </button>
             <button
               onClick={() => router.push(`/m/${createdRoom.slug}`)}
-              className="px-6 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all border border-zinc-700"
+              className="px-6 py-3.5 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-100 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] border border-white/15"
             >
               Entrar al Tablero
               <ArrowRight className="w-4 h-4" />
@@ -256,10 +258,13 @@ export default function Home() {
         /* Formulario del DM */
         <form
           onSubmit={handleCreatePoll}
-          className="bg-zinc-900/80 border border-zinc-800/80 rounded-2xl p-6 sm:p-8 backdrop-blur-md shadow-2xl space-y-6"
+          className="liquid-glass rounded-3xl p-6 sm:p-8 space-y-6 relative overflow-hidden"
         >
+          {/* Sutil resplandor ámbar superior */}
+          <div className="absolute -right-20 -top-20 w-52 h-52 bg-amber-500/[0.08] rounded-full blur-3xl pointer-events-none" />
+
           {errorMessage && (
-            <div className="p-4 rounded-xl bg-red-950/50 border border-red-500/40 text-red-200 text-xs sm:text-sm flex items-start gap-3">
+            <div className="p-4 rounded-2xl bg-red-950/40 border border-red-500/40 text-red-200 text-xs sm:text-sm flex items-start gap-3 backdrop-blur-md">
               <AlertCircle className="w-5 h-5 flex-shrink-0 text-red-400" />
               <p>{errorMessage}</p>
             </div>
@@ -267,7 +272,7 @@ export default function Home() {
 
           {/* Título de la campaña */}
           <div className="space-y-2">
-            <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider">
+            <label className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
               Título de la Campaña / Aventura
             </label>
             <input
@@ -276,24 +281,24 @@ export default function Home() {
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Ej. La Maldición de Strahd, Mesa de los Viernes..."
               required
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:outline-none transition-all"
+              className="w-full liquid-glass-input rounded-2xl px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-500"
             />
           </div>
 
           {/* Mes y Año */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+              <label className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5 text-amber-400" />
                 Mes a Coordinar
               </label>
               <select
                 value={month}
                 onChange={(e) => setMonth(Number(e.target.value))}
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all cursor-pointer"
+                className="w-full liquid-glass-input rounded-2xl px-4 py-3 text-sm text-zinc-100 cursor-pointer"
               >
                 {availableMonths.map((m) => (
-                  <option key={m.index} value={m.index}>
+                  <option key={m.index} value={m.index} className="bg-zinc-900 text-zinc-100">
                     {m.name}
                   </option>
                 ))}
@@ -301,16 +306,16 @@ export default function Home() {
             </div>
 
             <div className="space-y-2">
-              <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider">
+              <label className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
                 Año
               </label>
               <select
                 value={year}
                 onChange={(e) => setYear(Number(e.target.value))}
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all cursor-pointer"
+                className="w-full liquid-glass-input rounded-2xl px-4 py-3 text-sm text-zinc-100 cursor-pointer"
               >
                 {[currentYear, currentYear + 1].map((y) => (
-                  <option key={y} value={y}>
+                  <option key={y} value={y} className="bg-zinc-900 text-zinc-100">
                     {y}
                   </option>
                 ))}
@@ -320,7 +325,7 @@ export default function Home() {
 
           {/* Participantes */}
           <div className="space-y-3">
-            <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center justify-between">
+            <label className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
               <span className="flex items-center gap-1.5">
                 <Users className="w-3.5 h-3.5 text-amber-400" />
                 Participantes de la mesa (Total: {participants.length})
@@ -337,12 +342,12 @@ export default function Home() {
                 onChange={(e) => setParticipantInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Nombre o personaje (Enter para agregar)..."
-                className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all"
+                className="flex-1 liquid-glass-input rounded-2xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500"
               />
               <button
                 type="button"
                 onClick={handleAddParticipant}
-                className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl text-xs font-bold flex items-center gap-1 transition-all border border-zinc-700"
+                className="px-4 py-2.5 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-200 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all border border-white/10 active:scale-95"
               >
                 <Plus className="w-4 h-4" />
                 Agregar
@@ -351,7 +356,7 @@ export default function Home() {
 
             {/* Tags de participantes */}
             {participants.length === 0 ? (
-              <div className="p-3.5 rounded-xl border border-dashed border-zinc-800 bg-zinc-950/40 text-center text-xs text-zinc-500">
+              <div className="p-4 rounded-2xl border border-dashed border-white/10 bg-white/[0.02] text-center text-xs text-zinc-500 backdrop-blur-sm">
                 Aún no has agregado participantes. Escribe el nombre o personaje arriba y pulsa Enter o Agregar.
               </div>
             ) : (
@@ -359,13 +364,13 @@ export default function Home() {
                 {participants.map((name) => (
                   <span
                     key={name}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs font-medium"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-2xl liquid-glass-subtle border border-white/15 text-zinc-100 text-xs font-semibold shadow-sm"
                   >
-                    {name}
+                    <span>{name}</span>
                     <button
                       type="button"
                       onClick={() => handleRemoveParticipant(name)}
-                      className="text-zinc-500 hover:text-red-400 transition-colors"
+                      className="text-zinc-400 hover:text-red-400 transition-colors p-0.5"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
@@ -379,7 +384,7 @@ export default function Home() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-4 bg-gradient-to-r from-amber-500 via-amber-600 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-zinc-950 font-black text-sm uppercase tracking-wider rounded-xl shadow-lg shadow-amber-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full py-4 ios-btn-amber text-zinc-950 font-black text-sm uppercase tracking-wider rounded-2xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98]"
             >
               <Dices className="w-5 h-5" />
               {isLoading ? "Creando Sala..." : "Crear Sala y Generar Enlace"}
@@ -390,11 +395,11 @@ export default function Home() {
 
       {/* Sección de acceso directo a Mesas Guardadas si existen */}
       {savedPolls.length > 0 && (
-        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-5 sm:p-6 backdrop-blur-md space-y-4">
+        <div className="liquid-glass rounded-3xl p-5 sm:p-6 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <BookmarkCheck className="w-5 h-5 text-amber-400" />
-              <h2 className="text-base sm:text-lg font-bold text-zinc-100">
+              <h2 className="text-base sm:text-lg font-bold text-zinc-100 tracking-tight">
                 Tus Mesas Creadas ({savedPolls.length})
               </h2>
             </div>
@@ -414,17 +419,17 @@ export default function Home() {
                 <Link
                   key={poll.slug}
                   href={`/m/${poll.slug}`}
-                  className="p-3.5 rounded-xl bg-zinc-950/70 border border-zinc-800 hover:border-amber-500/50 hover:bg-zinc-900/80 transition-all group flex items-center justify-between"
+                  className="p-4 rounded-2xl liquid-glass-subtle hover:border-amber-400/40 hover:bg-white/[0.08] transition-all group flex items-center justify-between active:scale-[0.98]"
                 >
                   <div className="min-w-0 pr-3">
-                    <p className="text-sm font-semibold text-zinc-200 group-hover:text-amber-400 truncate transition-colors">
+                    <p className="text-sm font-bold text-zinc-200 group-hover:text-amber-300 truncate transition-colors">
                       {poll.title}
                     </p>
                     <p className="text-xs text-zinc-400 mt-0.5">
                       {monthName} {poll.year}
                     </p>
                   </div>
-                  <ArrowRight className="w-4 h-4 text-zinc-600 group-hover:text-amber-400 flex-shrink-0 transition-colors" />
+                  <ArrowRight className="w-4 h-4 text-zinc-500 group-hover:text-amber-400 flex-shrink-0 transition-colors" />
                 </Link>
               );
             })}

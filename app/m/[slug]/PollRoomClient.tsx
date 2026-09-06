@@ -101,25 +101,27 @@ export default function PollRoomClient({ slug }: PollRoomClientProps) {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
-        <Loader2 className="w-10 h-10 text-amber-500 animate-spin" />
-        <p className="text-zinc-400 text-sm font-medium">Cargando tablero de la mesa...</p>
+        <div className="w-16 h-16 rounded-3xl liquid-glass flex items-center justify-center border border-white/15 shadow-xl">
+          <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
+        </div>
+        <p className="text-zinc-400 text-sm font-semibold tracking-tight">Cargando tablero de la mesa...</p>
       </div>
     );
   }
 
   if (error || !poll) {
     return (
-      <div className="max-w-md mx-auto bg-zinc-900/90 border border-zinc-800 rounded-2xl p-6 text-center space-y-4">
-        <div className="w-12 h-12 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center mx-auto">
-          <AlertCircle className="w-6 h-6" />
+      <div className="max-w-md mx-auto liquid-glass-elevated rounded-3xl p-7 text-center space-y-5 shadow-2xl">
+        <div className="w-14 h-14 rounded-2xl bg-red-500/20 text-red-400 flex items-center justify-center mx-auto border border-red-500/30">
+          <AlertCircle className="w-7 h-7" />
         </div>
-        <h2 className="text-xl font-bold text-zinc-100">Sala no encontrada</h2>
-        <p className="text-xs text-zinc-400">
+        <h2 className="text-xl font-black text-zinc-100 tracking-tight">Sala no encontrada</h2>
+        <p className="text-xs text-zinc-400 leading-relaxed">
           {error || "El enlace ingresado no corresponde a ninguna encuesta activa."}
         </p>
         <button
           onClick={() => router.push("/")}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl text-xs font-semibold transition-colors"
+          className="inline-flex items-center gap-2 px-5 py-2.5 ios-btn-amber text-zinc-950 rounded-2xl text-xs font-black transition-all active:scale-95 shadow-md"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           Volver al Inicio
@@ -133,9 +135,9 @@ export default function PollRoomClient({ slug }: PollRoomClientProps) {
       <div className="flex items-center justify-between">
         <button
           onClick={() => router.push("/")}
-          className="inline-flex items-center gap-2 text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
+          className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-2xl text-xs font-semibold text-zinc-300 hover:text-white liquid-glass-subtle border border-white/10 transition-all active:scale-95"
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
+          <ArrowLeft className="w-3.5 h-3.5 text-amber-400" />
           Crear otra sala
         </button>
       </div>
