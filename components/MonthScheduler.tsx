@@ -21,6 +21,9 @@ import {
   Loader2,
   Eye,
   X,
+  LayoutGrid,
+  List,
+  Plus,
 } from "lucide-react";
 import { Poll, AvailabilityMap } from "@/lib/supabase";
 import ClaimCharacterModal from "@/components/ClaimCharacterModal";
@@ -37,6 +40,8 @@ import {
   downloadIcsFile,
   CalendarDay,
 } from "@/lib/calendarUtils";
+
+const WEEKDAY_NAMES_SHORT = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
 interface MonthSchedulerProps {
   initialPoll: Poll;
@@ -58,7 +63,16 @@ export default function MonthScheduler({
   const [copiedWhatsApp, setCopiedWhatsApp] = useState<boolean>(false);
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [showGoogleDropdown, setShowGoogleDropdown] = useState<boolean>(false);
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [listFilter, setListFilter] = useState<"all" | "weekends" | "quorum">("all");
   const googleDropdownRef = useRef<HTMLDivElement>(null);
+
+  // En dispositivos móviles (pantallas < 640px), activar por defecto la vista Lista/Agenda
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 640) {
+      setViewMode("list");
+    }
+  }, []);
 
   // Cerrar dropdown de Google Calendar al hacer clic fuera o presionar Escape
   useEffect(() => {
@@ -203,9 +217,41 @@ export default function MonthScheduler({
     ).length;
   }, [poll.availability, selectedPlayer]);
 
+  const todayDateStr = useMemo(() => formatDateKey(new Date()), []);
+
   const calendarDays = useMemo(() => {
     return getMonthDays(poll.year, poll.month);
   }, [poll.year, poll.month]);
+
+  const currentMonthDays = useMemo(() => {
+    return calendarDays.filter((d) => d.isCurrentMonth);
+  }, [calendarDays]);
+
+  const upcomingMonthDays = useMemo(() => {
+    return currentMonthDays.filter((d) => d.dateString >= todayDateStr);
+  }, [currentMonthDays, todayDateStr]);
+
+  const filteredListDays = useMemo(() => {
+    return currentMonthDays.filter((cellDay) => {
+      // Excluir estrictamente fechas pasadas en la vista de agenda
+      if (cellDay.dateString < todayDateStr) {
+        return false;
+      }
+
+      const voters = poll.availability[cellDay.dateString] || [];
+      const voterCount = voters.length;
+      const dayOfWeek = cellDay.date.getDay();
+      const isWeekendOrFriday = dayOfWeek === 0 || dayOfWeek === 5 || dayOfWeek === 6;
+
+      if (listFilter === "weekends") {
+        return isWeekendOrFriday;
+      }
+      if (listFilter === "quorum") {
+        return voterCount > 0;
+      }
+      return true;
+    });
+  }, [currentMonthDays, listFilter, poll.availability, todayDateStr]);
 
   const totalParticipants = poll.participants.length;
 
@@ -251,8 +297,6 @@ export default function MonthScheduler({
       flushPendingSave();
     }, 350);
   }, [flushPendingSave]);
-
-  const todayDateStr = formatDateKey(new Date());
 
   // Alternar disponibilidad del jugador actual para una fecha de manera inmediata y fluida
   const toggleDateAvailability = (dateStr: string) => {
@@ -511,254 +555,544 @@ export default function MonthScheduler({
 
       {/* Calendario Mensual */}
       <div className="bg-zinc-900/80 border border-zinc-800/80 rounded-2xl p-4 sm:p-6 backdrop-blur-md shadow-2xl">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg sm:text-xl font-bold text-zinc-100 flex items-center gap-2">
-            <CalendarIcon className="w-5 h-5 text-amber-400" />
-            Calendario de Disponibilidad
-          </h2>
-          <div className="flex items-center gap-4 text-xs text-zinc-400">
-            <div className="flex items-center gap-1.5">
+        {/* Cabecera del Calendario + Selector de Vista */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div className="flex items-center justify-between w-full sm:w-auto">
+            <h2 className="text-lg sm:text-xl font-bold text-zinc-100 flex items-center gap-2">
+              <CalendarIcon className="w-5 h-5 text-amber-400" />
+              <span>Calendario de Disponibilidad</span>
+            </h2>
+
+            {/* Selector de Vista en Mobile (al lado del título) */}
+            <div className="sm:hidden flex items-center gap-1 bg-zinc-950 p-1 rounded-xl border border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setViewMode("list")}
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  viewMode === "list"
+                    ? "bg-zinc-800 text-amber-400 shadow-sm border border-zinc-700/80"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+                title="Vista Lista / Agenda"
+              >
+                <List className="w-3.5 h-3.5" />
+                <span>Agenda</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("grid")}
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  viewMode === "grid"
+                    ? "bg-zinc-800 text-amber-400 shadow-sm border border-zinc-700/80"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+                title="Vista Cuadrícula (Mes)"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>Mes</span>
+              </button>
+            </div>
+          </div>
+
+          {/* En desktop: Leyenda + Selector de Vista */}
+          <div className="hidden sm:flex items-center gap-4 text-xs">
+            <div className="flex items-center gap-1.5 text-zinc-400">
               <span className="w-3 h-3 rounded-full bg-emerald-500/20 border border-emerald-500 inline-block" />
               <span>100% Quórum</span>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 text-zinc-400">
               <span className="w-3 h-3 rounded-full bg-amber-500/20 border border-amber-500 inline-block" />
               <span>Tu voto</span>
+            </div>
+
+            <div className="flex items-center gap-1 bg-zinc-950 p-1 rounded-xl border border-zinc-800 ml-2">
+              <button
+                type="button"
+                onClick={() => setViewMode("grid")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  viewMode === "grid"
+                    ? "bg-zinc-800 text-amber-400 shadow-sm border border-zinc-700/80"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>Mes</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("list")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  viewMode === "list"
+                    ? "bg-zinc-800 text-amber-400 shadow-sm border border-zinc-700/80"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <List className="w-3.5 h-3.5" />
+                <span>Agenda</span>
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Encabezado Días de la semana */}
-        <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-2">
-          {WEEKDAYS_ES.map((day, idx) => (
-            <div
-              key={day}
-              className={`text-center py-2 text-xs font-bold uppercase tracking-wider ${
-                idx >= 5 ? "text-amber-400/80" : "text-zinc-400"
+        {/* Si está en modo Lista: Filtros rápidos */}
+        {viewMode === "list" && (
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-4 text-xs scrollbar-none">
+            <button
+              type="button"
+              onClick={() => setListFilter("all")}
+              className={`px-3 py-1.5 rounded-xl font-medium whitespace-nowrap transition-all border ${
+                listFilter === "all"
+                  ? "bg-amber-500 text-zinc-950 font-bold border-amber-400 shadow-sm"
+                  : "bg-zinc-950 text-zinc-400 border-zinc-800 hover:border-zinc-700 hover:text-zinc-200"
               }`}
             >
-              {day}
-            </div>
-          ))}
-        </div>
+              Próximas fechas ({upcomingMonthDays.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setListFilter("weekends")}
+              className={`px-3 py-1.5 rounded-xl font-medium whitespace-nowrap transition-all border flex items-center gap-1.5 ${
+                listFilter === "weekends"
+                  ? "bg-amber-500 text-zinc-950 font-bold border-amber-400 shadow-sm"
+                  : "bg-zinc-950 text-zinc-400 border-zinc-800 hover:border-zinc-700 hover:text-zinc-200"
+              }`}
+            >
+              <Dices className="w-3.5 h-3.5" />
+              <span>Fines de Semana (Vie-Dom)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setListFilter("quorum")}
+              className={`px-3 py-1.5 rounded-xl font-medium whitespace-nowrap transition-all border flex items-center gap-1.5 ${
+                listFilter === "quorum"
+                  ? "bg-amber-500 text-zinc-950 font-bold border-amber-400 shadow-sm"
+                  : "bg-zinc-950 text-zinc-400 border-zinc-800 hover:border-zinc-700 hover:text-zinc-200"
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Con respuestas</span>
+            </button>
+          </div>
+        )}
 
-        {/* Grilla de Días */}
-        <div className="grid grid-cols-7 gap-1.5 sm:gap-2.5">
-          {calendarDays.map((cellDay, index) => {
-            const dateKey = cellDay.dateString;
-            const voters = poll.availability[dateKey] || [];
-            const voterCount = voters.length;
-            const isQuorumReached = voterCount >= totalParticipants && totalParticipants > 0;
-            const isSelectedPlayerVoted = selectedPlayer ? voters.includes(selectedPlayer) : false;
-            const percentage = totalParticipants > 0 ? (voterCount / totalParticipants) * 100 : 0;
-            const isPastDate = cellDay.dateString < todayDateStr;
+        {viewMode === "list" ? (
+          /* ============================================================ */
+          /* VISTA DE LISTA / AGENDA (Limitada a ~5 fechas con scroll)   */
+          /* ============================================================ */
+          <div>
+            {filteredListDays.length === 0 ? (
+              <div className="p-8 text-center bg-zinc-950/40 rounded-2xl border border-zinc-800 text-zinc-500 text-sm">
+                No hay fechas próximas pendientes en este mes que coincidan con el filtro.
+              </div>
+            ) : (
+              <div className="space-y-2.5 max-h-[460px] sm:max-h-[490px] overflow-y-auto pr-1 sm:pr-2 overscroll-contain scroll-smooth">
+                {filteredListDays.map((cellDay) => {
+                  const dateKey = cellDay.dateString;
+                  const voters = poll.availability[dateKey] || [];
+                  const voterCount = voters.length;
+                  const isQuorumReached = voterCount >= totalParticipants && totalParticipants > 0;
+                  const isSelectedPlayerVoted = selectedPlayer ? voters.includes(selectedPlayer) : false;
+                  const percentage = totalParticipants > 0 ? (voterCount / totalParticipants) * 100 : 0;
+                  const dayOfWeek = cellDay.date.getDay();
+                  const isWeekendOrFriday = dayOfWeek === 0 || dayOfWeek === 5 || dayOfWeek === 6;
+                  const isToday = cellDay.dateString === todayDateStr;
 
-            if (!cellDay.isCurrentMonth) {
-              return (
-                <div
-                  key={index}
-                  className="min-h-[85px] sm:min-h-[110px] p-2 rounded-xl bg-zinc-950/30 border border-zinc-900/50 opacity-25 flex flex-col justify-between select-none"
-                >
-                  <span className="text-xs text-zinc-600 font-medium">{cellDay.dayNumber}</span>
-                </div>
-              );
-            }
-
-            return (
-              <div
-                key={dateKey}
-                onClick={
-                  isPastDate || !selectedPlayer
-                    ? undefined
-                    : () => toggleDateAvailability(dateKey)
-                }
-                onMouseEnter={() => setHoveredDay(cellDay)}
-                onMouseLeave={() => setHoveredDay(null)}
-                title={
-                  isPastDate
-                    ? "Esta fecha ya pasó (no disponible para coordinar)"
-                    : !selectedPlayer
-                    ? undefined
-                    : isSelectedPlayerVoted
-                    ? "Clic para desmarcar tu disponibilidad"
-                    : "Clic para marcar tu disponibilidad"
-                }
-                className={`group relative min-h-[90px] sm:min-h-[115px] p-2 sm:p-2.5 rounded-xl border transition-all duration-200 flex flex-col justify-between select-none ${
-                  isPastDate
-                    ? "bg-zinc-950/30 border-zinc-900/80 opacity-40 cursor-not-allowed"
-                    : !selectedPlayer
-                    ? isQuorumReached
-                      ? "bg-emerald-950/40 border-emerald-500/80 cursor-default"
-                      : "bg-zinc-950/70 border-zinc-800 cursor-default"
-                    : isQuorumReached
-                    ? "bg-emerald-950/50 border-emerald-500 hover:border-emerald-400 shadow-lg shadow-emerald-950/30 hover:shadow-emerald-900/50 cursor-pointer"
-                    : isSelectedPlayerVoted
-                    ? "bg-amber-950/30 border-amber-500/60 hover:border-amber-400 cursor-pointer"
-                    : "bg-zinc-950/70 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/40 cursor-pointer"
-                }`}
-              >
-                {/* Cabecera de celda: Día + Checkbox de usuario */}
-                <div className="flex items-center justify-between">
-                  <span
-                    className={`text-xs sm:text-sm font-bold ${
-                      isPastDate
-                        ? "text-zinc-600"
-                        : isQuorumReached
-                        ? "text-emerald-300"
-                        : cellDay.isWeekend
-                        ? "text-amber-400"
-                        : "text-zinc-300"
-                    }`}
-                  >
-                    {cellDay.dayNumber}
-                  </span>
-
-                  {/* Indicador de si el día es pasado o si el jugador votó */}
-                  {isPastDate ? (
-                    <span className="text-[10px] text-zinc-600 font-medium">Pasado</span>
-                  ) : (
-                    selectedPlayer && (
-                      <span
-                        title={
-                          isSelectedPlayerVoted
-                            ? "Marcaste disponible este día (clic para quitar)"
-                            : "No has marcado este día (clic para marcar)"
-                        }
-                        className={`w-4 h-4 rounded-md flex items-center justify-center transition-all ${
-                          isSelectedPlayerVoted
-                            ? "bg-amber-500 text-zinc-950 shadow-sm"
-                            : "border border-zinc-700 group-hover:border-zinc-500"
-                        }`}
-                      >
-                        {isSelectedPlayerVoted && <Check className="w-3 h-3 stroke-[3]" />}
-                      </span>
-                    )
-                  )}
-                </div>
-
-                {/* Badge central de Quórum (ÚNICO elemento que abre el modal de detalle de asistencia) */}
-                <div className="my-auto py-1 flex justify-center">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActiveDayModal(cellDay);
-                    }}
-                    title="Clic para ver quiénes votaron este día"
-                    className="cursor-pointer transition-transform hover:scale-105 active:scale-95 focus:outline-none"
-                  >
-                    {isQuorumReached ? (
-                      <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500 text-zinc-950 font-black text-xs sm:text-sm shadow-md shadow-emerald-500/30 animate-pulse hover:bg-emerald-400 transition-colors">
-                        <span>★</span>
-                        <span>
-                          {voterCount}/{totalParticipants}
-                        </span>
-                      </div>
-                    ) : (
-                      <div
-                        className={`inline-flex items-center px-1.5 sm:px-2 py-0.5 rounded-md font-bold text-[11px] sm:text-xs transition-colors ${
-                          voterCount > 0
-                            ? "bg-zinc-800 text-zinc-200 border border-zinc-700 hover:border-amber-500/60 hover:bg-zinc-700"
-                            : "bg-zinc-900/60 text-zinc-600 border border-zinc-800/50 hover:border-zinc-600 hover:text-zinc-400"
-                        }`}
-                      >
-                        {voterCount}/{totalParticipants}
-                      </div>
-                    )}
-                  </button>
-                </div>
-
-                {/* Mini Barra de progreso visual */}
-                <div className="w-full space-y-1">
-                  <div className="w-full h-1 sm:h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                  return (
                     <div
-                      className={`h-full transition-all duration-300 rounded-full ${
+                      key={dateKey}
+                      className={`p-3 sm:p-3.5 rounded-2xl border transition-all duration-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
                         isQuorumReached
-                          ? "bg-emerald-400"
-                          : voterCount > 0
-                          ? "bg-amber-500"
-                          : "bg-transparent"
+                          ? "bg-emerald-950/40 border-emerald-500/80 shadow-lg shadow-emerald-950/30"
+                          : isSelectedPlayerVoted
+                          ? "bg-amber-950/25 border-amber-500/50"
+                          : "bg-zinc-950/70 border-zinc-800 hover:border-zinc-700"
                       }`}
-                      style={{ width: `${percentage}%` }}
-                    />
-                  </div>
-
-                  {/* Votantes visibles en pantallas medianas */}
-                  <div className="hidden sm:flex items-center gap-1 overflow-hidden text-[10px] text-zinc-400 truncate">
-                    {voterCount > 0 ? (
-                      <span className="truncate">
-                        {voters.slice(0, 2).join(", ")}
-                        {voters.length > 2 && ` +${voters.length - 2}`}
-                      </span>
-                    ) : (
-                      <span className="text-zinc-600 italic">Sin votos</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Tooltip flotante al pasar el cursor */}
-                {hoveredDay?.dateString === dateKey && (
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-30 w-56 p-3 bg-zinc-950/95 border border-zinc-700 rounded-xl shadow-2xl backdrop-blur-md pointer-events-none text-left">
-                    <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-zinc-800">
-                      <span className="text-xs font-bold text-zinc-200">
-                        {formatFriendlyDate(dateKey)}
-                      </span>
-                      <span
-                        className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${
-                          isQuorumReached
-                            ? "bg-emerald-500/20 text-emerald-300"
-                            : "bg-zinc-800 text-zinc-400"
-                        }`}
-                      >
-                        {voterCount}/{totalParticipants}
-                      </span>
-                    </div>
-
-                    <div className="space-y-1 text-xs">
-                      <div className="text-[11px] text-zinc-400 font-semibold uppercase tracking-wider">
-                        Confirmados ({voterCount}):
-                      </div>
-                      {voterCount > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {voters.map((name) => (
-                            <span
-                              key={name}
-                              className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200 text-[11px] border border-zinc-700"
-                            >
-                              {name}
-                            </span>
-                          ))}
+                    >
+                      <div className="flex items-start sm:items-center gap-3.5 min-w-0">
+                        {/* Insignia de Fecha */}
+                        <div
+                          className={`w-12 h-12 sm:w-13 sm:h-13 p-1.5 rounded-xl flex flex-col items-center justify-center flex-shrink-0 border ${
+                            isQuorumReached
+                              ? "bg-emerald-500 text-zinc-950 border-emerald-400 font-black shadow-md shadow-emerald-500/20"
+                              : isSelectedPlayerVoted
+                              ? "bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold"
+                              : isWeekendOrFriday
+                              ? "bg-zinc-900 text-amber-400 border-zinc-700 font-bold"
+                              : "bg-zinc-900 text-zinc-400 border-zinc-800 font-medium"
+                          }`}
+                        >
+                          <span className="text-[10px] uppercase font-bold tracking-wider leading-tight">
+                            {WEEKDAY_NAMES_SHORT[dayOfWeek]}
+                          </span>
+                          <span className="text-lg sm:text-xl font-black leading-none mt-0.5">
+                            {cellDay.dayNumber}
+                          </span>
                         </div>
-                      ) : (
-                        <p className="text-zinc-500 italic text-[11px]">Nadie ha confirmado aún.</p>
-                      )}
 
-                      {totalParticipants - voterCount > 0 && (
-                        <>
-                          <div className="text-[11px] text-zinc-500 font-semibold uppercase tracking-wider pt-1">
-                            Faltan ({totalParticipants - voterCount}):
+                        {/* Información de disponibilidad */}
+                        <div className="min-w-0 space-y-1 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs sm:text-sm font-bold text-zinc-100">
+                              {formatFriendlyDate(dateKey)}
+                            </span>
+
+                            {isToday && (
+                              <span className="text-[10px] px-2 py-0.2 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold">
+                                Hoy
+                              </span>
+                            )}
+
+                            {isQuorumReached ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold animate-pulse">
+                                <Sparkles className="w-3 h-3" />
+                                ★ ¡100% Quórum! ({voterCount}/{totalParticipants})
+                              </span>
+                            ) : (
+                              <span
+                                className={`text-[11px] px-2 py-0.5 rounded-md font-semibold border ${
+                                  voterCount > 0
+                                    ? "bg-zinc-900 text-zinc-300 border-zinc-700"
+                                    : "bg-zinc-950 text-zinc-500 border-zinc-900"
+                                }`}
+                              >
+                                {voterCount}/{totalParticipants} confirmados
+                              </span>
+                            )}
                           </div>
-                          <div className="flex flex-wrap gap-1">
-                            {poll.participants
-                              .filter((p) => !voters.includes(p))
-                              .map((name) => (
+
+                          {/* Barra de progreso visual */}
+                          <div className="w-full max-w-xs h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full transition-all duration-300 rounded-full ${
+                                isQuorumReached
+                                  ? "bg-emerald-400"
+                                  : voterCount > 0
+                                  ? "bg-amber-500"
+                                  : "bg-transparent"
+                              }`}
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+
+                          {/* Nombres directamente visibles */}
+                          {voterCount > 0 ? (
+                            <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                              <span className="text-[10px] sm:text-[11px] text-zinc-400 font-medium">
+                                Disponibles:
+                              </span>
+                              {voters.map((name) => (
                                 <span
                                   key={name}
-                                  className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-500 text-[11px]"
+                                  className={`text-[10px] sm:text-[11px] px-2 py-0.5 rounded-md border font-medium ${
+                                    name === selectedPlayer
+                                      ? "bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold"
+                                      : "bg-zinc-900 text-zinc-300 border-zinc-800"
+                                  }`}
+                                >
+                                  ✓ {name}
+                                </span>
+                              ))}
+                              {totalParticipants - voterCount > 0 && (
+                                <span className="text-[10px] sm:text-[11px] text-zinc-500 ml-1">
+                                  (Faltan {totalParticipants - voterCount})
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="text-[10px] sm:text-[11px] text-zinc-500 italic">
+                              Nadie ha marcado disponibilidad aún.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Botón de acción táctil */}
+                      <div className="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-800/80 justify-end flex-shrink-0">
+                        {selectedPlayer ? (
+                          <button
+                            type="button"
+                            onClick={() => toggleDateAvailability(dateKey)}
+                            className={`w-full sm:w-auto min-h-[42px] px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 active:scale-95 ${
+                              isSelectedPlayerVoted
+                                ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/40"
+                                : "bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700"
+                            }`}
+                          >
+                            {isSelectedPlayerVoted ? (
+                              <>
+                                <Check className="w-4 h-4 stroke-[3]" />
+                                <span>Disponible</span>
+                              </>
+                            ) : (
+                              <>
+                                <Plus className="w-4 h-4" />
+                                <span>Marcar disponible</span>
+                              </>
+                            )}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setActiveDayModal(cellDay)}
+                            className="w-full sm:w-auto min-h-[42px] px-4 py-2 bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-zinc-700"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Ver detalle</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {filteredListDays.length > 5 && (
+              <p className="text-[11px] text-zinc-500 text-center pt-2.5 flex items-center justify-center gap-1">
+                <span>Mostrando 5 de {filteredListDays.length} fechas próximas</span>
+                <span>•</span>
+                <span>Desliza para ver más</span>
+              </p>
+            )}
+          </div>
+        ) : (
+          /* ============================================================ */
+          /* VISTA DE CUADRÍCULA (Mes completo)                          */
+          /* ============================================================ */
+          <>
+            {/* Encabezado Días de la semana */}
+            <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-2">
+              {WEEKDAYS_ES.map((day, idx) => (
+                <div
+                  key={day}
+                  className={`text-center py-2 text-xs font-bold uppercase tracking-wider ${
+                    idx >= 5 ? "text-amber-400/80" : "text-zinc-400"
+                  }`}
+                >
+                  {day}
+                </div>
+              ))}
+            </div>
+
+            {/* Grilla de Días */}
+            <div className="grid grid-cols-7 gap-1.5 sm:gap-2.5">
+              {calendarDays.map((cellDay, index) => {
+                const dateKey = cellDay.dateString;
+                const voters = poll.availability[dateKey] || [];
+                const voterCount = voters.length;
+                const isQuorumReached = voterCount >= totalParticipants && totalParticipants > 0;
+                const isSelectedPlayerVoted = selectedPlayer ? voters.includes(selectedPlayer) : false;
+                const percentage = totalParticipants > 0 ? (voterCount / totalParticipants) * 100 : 0;
+                const isPastDate = cellDay.dateString < todayDateStr;
+
+                if (!cellDay.isCurrentMonth) {
+                  return (
+                    <div
+                      key={index}
+                      className="min-h-[70px] sm:min-h-[110px] p-1.5 sm:p-2 rounded-xl bg-zinc-950/30 border border-zinc-900/50 opacity-25 flex flex-col justify-between select-none"
+                    >
+                      <span className="text-xs text-zinc-600 font-medium">{cellDay.dayNumber}</span>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={dateKey}
+                    onClick={
+                      isPastDate || !selectedPlayer
+                        ? undefined
+                        : () => toggleDateAvailability(dateKey)
+                    }
+                    onMouseEnter={() => setHoveredDay(cellDay)}
+                    onMouseLeave={() => setHoveredDay(null)}
+                    title={
+                      isPastDate
+                        ? "Esta fecha ya pasó (no disponible para coordinar)"
+                        : !selectedPlayer
+                        ? undefined
+                        : isSelectedPlayerVoted
+                        ? "Clic para desmarcar tu disponibilidad"
+                        : "Clic para marcar tu disponibilidad"
+                    }
+                    className={`group relative min-h-[72px] sm:min-h-[115px] p-1.5 sm:p-2.5 rounded-xl border transition-all duration-200 flex flex-col justify-between select-none ${
+                      isPastDate
+                        ? "bg-zinc-950/30 border-zinc-900/80 opacity-40 cursor-not-allowed"
+                        : !selectedPlayer
+                        ? isQuorumReached
+                          ? "bg-emerald-950/40 border-emerald-500/80 cursor-default"
+                          : "bg-zinc-950/70 border-zinc-800 cursor-default"
+                        : isQuorumReached
+                        ? "bg-emerald-950/50 border-emerald-500 hover:border-emerald-400 shadow-lg shadow-emerald-950/30 hover:shadow-emerald-900/50 cursor-pointer"
+                        : isSelectedPlayerVoted
+                        ? "bg-amber-950/30 border-amber-500/60 hover:border-amber-400 cursor-pointer"
+                        : "bg-zinc-950/70 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/40 cursor-pointer"
+                    }`}
+                  >
+                    {/* Cabecera de celda: Día + Checkbox de usuario */}
+                    <div className="flex items-center justify-between">
+                      <span
+                        className={`text-xs sm:text-sm font-bold ${
+                          isPastDate
+                            ? "text-zinc-600"
+                            : isQuorumReached
+                            ? "text-emerald-300"
+                            : cellDay.isWeekend
+                            ? "text-amber-400"
+                            : "text-zinc-300"
+                        }`}
+                      >
+                        {cellDay.dayNumber}
+                      </span>
+
+                      {/* Indicador de si el día es pasado o si el jugador votó */}
+                      {isPastDate ? (
+                        <span className="text-[9px] sm:text-[10px] text-zinc-600 font-medium">Pasado</span>
+                      ) : (
+                        selectedPlayer && (
+                          <span
+                            title={
+                              isSelectedPlayerVoted
+                                ? "Marcaste disponible este día (clic para quitar)"
+                                : "No has marcado este día (clic para marcar)"
+                            }
+                            className={`w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-md flex items-center justify-center transition-all ${
+                              isSelectedPlayerVoted
+                                ? "bg-amber-500 text-zinc-950 shadow-sm"
+                                : "border border-zinc-700 group-hover:border-zinc-500"
+                            }`}
+                          >
+                            {isSelectedPlayerVoted && <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3 stroke-[3]" />}
+                          </span>
+                        )
+                      )}
+                    </div>
+
+                    {/* Badge central de Quórum (ÚNICO elemento que abre el modal de detalle de asistencia) */}
+                    <div className="my-auto py-0.5 sm:py-1 flex justify-center">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveDayModal(cellDay);
+                        }}
+                        title="Clic para ver quiénes votaron este día"
+                        className="cursor-pointer transition-transform hover:scale-105 active:scale-95 focus:outline-none"
+                      >
+                        {isQuorumReached ? (
+                          <div className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-full bg-emerald-500 text-zinc-950 font-black text-[11px] sm:text-sm shadow-md shadow-emerald-500/30 animate-pulse hover:bg-emerald-400 transition-colors">
+                            <span>★</span>
+                            <span>
+                              {voterCount}/{totalParticipants}
+                            </span>
+                          </div>
+                        ) : (
+                          <div
+                            className={`inline-flex items-center px-1.5 sm:px-2 py-0.5 rounded-md font-bold text-[10px] sm:text-xs transition-colors ${
+                              voterCount > 0
+                                ? "bg-zinc-800 text-zinc-200 border border-zinc-700 hover:border-amber-500/60 hover:bg-zinc-700"
+                                : "bg-zinc-900/60 text-zinc-600 border border-zinc-800/50 hover:border-zinc-600 hover:text-zinc-400"
+                            }`}
+                          >
+                            {voterCount}/{totalParticipants}
+                          </div>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Mini Barra de progreso visual */}
+                    <div className="w-full space-y-1">
+                      <div className="w-full h-1 sm:h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-300 rounded-full ${
+                            isQuorumReached
+                              ? "bg-emerald-400"
+                              : voterCount > 0
+                              ? "bg-amber-500"
+                              : "bg-transparent"
+                          }`}
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+
+                      {/* Votantes visibles en pantallas medianas */}
+                      <div className="hidden sm:flex items-center gap-1 overflow-hidden text-[10px] text-zinc-400 truncate">
+                        {voterCount > 0 ? (
+                          <span className="truncate">
+                            {voters.slice(0, 2).join(", ")}
+                            {voters.length > 2 && ` +${voters.length - 2}`}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-600 italic">Sin votos</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Tooltip flotante al pasar el cursor */}
+                    {hoveredDay?.dateString === dateKey && (
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-30 w-56 p-3 bg-zinc-950/95 border border-zinc-700 rounded-xl shadow-2xl backdrop-blur-md pointer-events-none text-left hidden sm:block">
+                        <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-zinc-800">
+                          <span className="text-xs font-bold text-zinc-200">
+                            {formatFriendlyDate(dateKey)}
+                          </span>
+                          <span
+                            className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${
+                              isQuorumReached
+                                ? "bg-emerald-500/20 text-emerald-300"
+                                : "bg-zinc-800 text-zinc-400"
+                            }`}
+                          >
+                            {voterCount}/{totalParticipants}
+                          </span>
+                        </div>
+
+                        <div className="space-y-1 text-xs">
+                          <div className="text-[11px] text-zinc-400 font-semibold uppercase tracking-wider">
+                            Confirmados ({voterCount}):
+                          </div>
+                          {voterCount > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {voters.map((name) => (
+                                <span
+                                  key={name}
+                                  className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200 text-[11px] border border-zinc-700"
                                 >
                                   {name}
                                 </span>
                               ))}
-                          </div>
-                        </>
-                      )}
-                    </div>
+                            </div>
+                          ) : (
+                            <p className="text-zinc-500 italic text-[11px]">Nadie ha confirmado aún.</p>
+                          )}
+
+                          {totalParticipants - voterCount > 0 && (
+                            <>
+                              <div className="text-[11px] text-zinc-500 font-semibold uppercase tracking-wider pt-1">
+                                Faltan ({totalParticipants - voterCount}):
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {poll.participants
+                                  .filter((p) => !voters.includes(p))
+                                  .map((name) => (
+                                    <span
+                                      key={name}
+                                      className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-500 text-[11px]"
+                                    >
+                                      {name}
+                                    </span>
+                                  ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Barra de Acciones de Exportación */}
