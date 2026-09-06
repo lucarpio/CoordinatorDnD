@@ -33,20 +33,20 @@ export default function HeaderNav() {
     <div className="flex items-center gap-2 sm:gap-3">
       <Link
         href="/mis-mesas"
-        className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all border ${
+        className={`px-3.5 py-1.5 rounded-2xl text-xs font-semibold flex items-center gap-2 transition-all active:scale-95 ${
           isMisMesas
-            ? "bg-amber-500 text-zinc-950 border-amber-400 font-bold shadow-md shadow-amber-500/20"
-            : "bg-zinc-900/90 text-zinc-200 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800"
+            ? "ios-btn-amber text-zinc-950 font-bold shadow-md shadow-amber-500/20"
+            : "liquid-glass-subtle text-zinc-300 hover:text-white"
         }`}
       >
-        <BookmarkCheck className="w-3.5 h-3.5 text-amber-400" />
+        <BookmarkCheck className={`w-3.5 h-3.5 ${isMisMesas ? "text-zinc-950" : "text-amber-400"}`} />
         <span>Mis Mesas</span>
         {savedCount > 0 && (
           <span
-            className={`text-[11px] px-1.5 py-0.2 rounded-full font-bold ${
+            className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
               isMisMesas
-                ? "bg-zinc-950 text-amber-400"
-                : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                ? "bg-zinc-950/80 text-amber-300"
+                : "bg-amber-500/20 text-amber-300 border border-amber-400/30"
             }`}
           >
             {savedCount}
@@ -56,10 +56,10 @@ export default function HeaderNav() {
 
       <Link
         href="/"
-        className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all border ${
+        className={`px-3.5 py-1.5 rounded-2xl text-xs font-semibold flex items-center gap-2 transition-all active:scale-95 ${
           pathname === "/"
-            ? "bg-zinc-800 text-zinc-100 border-zinc-700"
-            : "bg-zinc-900/90 text-zinc-400 border-zinc-800/80 hover:text-zinc-200 hover:border-zinc-700 hover:bg-zinc-800"
+            ? "bg-white/[0.12] text-white border border-white/20 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)]"
+            : "liquid-glass-subtle text-zinc-400 hover:text-zinc-200"
         }`}
       >
         <PlusCircle className="w-3.5 h-3.5 text-amber-400" />

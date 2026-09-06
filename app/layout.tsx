@@ -55,11 +55,20 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" className="dark">
-      <body className="bg-[#090a0f] text-zinc-100 min-h-screen antialiased selection:bg-amber-500 selection:text-zinc-950">
-        <header className="border-b border-zinc-800/80 bg-zinc-950/60 backdrop-blur-md sticky top-0 z-40">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-            <a href="/" className="flex items-center gap-2.5 group">
-              <span className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 group-hover:border-amber-400 transition-colors">
+      <body className="bg-[#08090d] text-zinc-100 min-h-screen antialiased selection:bg-amber-500 selection:text-zinc-950 relative overflow-x-hidden">
+        {/* Orbes de luz ambiental líquida (detrás del cristal) */}
+        <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+          <div className="absolute -top-32 -left-20 w-[420px] h-[420px] bg-amber-500/[0.12] rounded-full blur-[130px]" />
+          <div className="absolute top-20 -right-24 w-[480px] h-[480px] bg-indigo-600/[0.14] rounded-full blur-[150px]" />
+          <div className="absolute top-[45%] left-[20%] w-[400px] h-[400px] bg-emerald-500/[0.08] rounded-full blur-[140px]" />
+          <div className="absolute -bottom-24 right-[15%] w-[440px] h-[440px] bg-amber-600/[0.10] rounded-full blur-[140px]" />
+        </div>
+
+        {/* Barra de Navegación Flotante estilo iOS Liquid Glass */}
+        <header className="sticky top-0 z-40 backdrop-blur-2xl bg-[#08090d]/65 border-b border-white/[0.08] shadow-[0_8px_24px_-4px_rgba(0,0,0,0.45)]">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between relative z-10">
+            <a href="/" className="flex items-center gap-2.5 group active:scale-95 transition-transform">
+              <span className="w-9 h-9 rounded-2xl bg-amber-500/15 border border-amber-400/30 flex items-center justify-center text-amber-400 group-hover:border-amber-400/60 shadow-[inset_0_1px_1px_rgba(255,255,255,0.25)] transition-all">
                 🎲
               </span>
               <span className="font-extrabold tracking-tight text-lg sm:text-xl text-zinc-100">
@@ -72,11 +81,11 @@ export default function RootLayout({
           </div>
         </header>
 
-        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-12 relative z-10">
           {children}
         </main>
 
-        <footer className="border-t border-zinc-900 mt-16 py-8 text-center text-xs text-zinc-500">
+        <footer className="border-t border-white/[0.06] mt-16 py-8 text-center text-xs text-zinc-500 relative z-10">
           CoordinatorDnD • Diseñado para grupos de rol que sufren para coincidir fechas por WhatsApp.
         </footer>
       </body>
