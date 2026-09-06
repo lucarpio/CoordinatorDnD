@@ -884,6 +884,18 @@ export default function MonthScheduler({
                 const isSelectedPlayerVoted = selectedPlayer ? voters.includes(selectedPlayer) : false;
                 const percentage = totalParticipants > 0 ? (voterCount / totalParticipants) * 100 : 0;
                 const isPastDate = cellDay.dateString < todayDateStr;
+                const colIndex = index % 7;
+
+                let tooltipPositionClass = "left-1/2 -translate-x-1/2";
+                let arrowPositionClass = "left-1/2 -translate-x-1/2";
+
+                if (colIndex === 0) {
+                  tooltipPositionClass = "left-0 translate-x-0";
+                  arrowPositionClass = "left-6";
+                } else if (colIndex === 6) {
+                  tooltipPositionClass = "right-0 left-auto translate-x-0";
+                  arrowPositionClass = "right-6";
+                }
 
                 if (!cellDay.isCurrentMonth) {
                   return (
@@ -916,6 +928,8 @@ export default function MonthScheduler({
                         : "Clic para marcar tu disponibilidad"
                     }
                     className={`group relative min-h-[72px] sm:min-h-[115px] p-2 sm:p-2.5 rounded-2xl border transition-all duration-200 flex flex-col justify-between select-none ${
+                      hoveredDay?.dateString === dateKey ? "z-40" : "z-10"
+                    } ${
                       isPastDate
                         ? "bg-black/25 border-white/[0.04] opacity-35 cursor-not-allowed"
                         : !selectedPlayer
@@ -1030,59 +1044,79 @@ export default function MonthScheduler({
 
                     {/* Tooltip flotante al pasar el cursor */}
                     {hoveredDay?.dateString === dateKey && (
-                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-30 w-56 p-3.5 liquid-glass-elevated rounded-2xl shadow-2xl pointer-events-none text-left hidden sm:block border border-white/15">
-                        <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-white/10">
-                          <span className="text-xs font-black text-zinc-100">
+                      <div
+                        className={`absolute bottom-full ${tooltipPositionClass} mb-2.5 z-50 w-60 sm:w-64 p-3.5 bg-[#0c0e14]/95 backdrop-blur-2xl rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.85)] pointer-events-none text-left hidden sm:block border border-white/20`}
+                      >
+                        {/* Flecha indicadora apuntando a la celda */}
+                        <div
+                          className={`absolute -bottom-1.5 ${arrowPositionClass} w-3 h-3 bg-[#0c0e14] border-r border-b border-white/20 rotate-45 pointer-events-none`}
+                        />
+
+                        <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-white/10">
+                          <span className="text-xs font-black text-white tracking-wide">
                             {formatFriendlyDate(dateKey)}
                           </span>
                           <span
-                            className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                            className={`text-[11px] font-black px-2.5 py-0.5 rounded-full ${
                               isQuorumReached
-                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/30"
-                                : "liquid-glass-subtle text-zinc-300"
+                                ? "bg-emerald-500/25 text-emerald-300 border border-emerald-400/50 shadow-sm shadow-emerald-500/20"
+                                : voterCount > 0
+                                ? "bg-white/10 text-zinc-200 border border-white/15"
+                                : "bg-white/5 text-zinc-500 border border-white/[0.06]"
                             }`}
                           >
                             {voterCount}/{totalParticipants}
                           </span>
                         </div>
 
-                        <div className="space-y-1 text-xs">
-                          <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">
-                            Confirmados ({voterCount}):
-                          </div>
-                          {voterCount > 0 ? (
-                            <div className="flex flex-wrap gap-1">
-                              {voters.map((name) => (
-                                <span
-                                  key={name}
-                                  className="px-2 py-0.5 rounded-lg liquid-glass-subtle text-zinc-200 text-[11px] border border-white/10"
-                                >
-                                  {name}
+                        <div className="space-y-2.5 text-xs">
+                          <div>
+                            <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                              <span>Confirmados ({voterCount})</span>
+                              {isQuorumReached && (
+                                <span className="text-emerald-400 font-bold flex items-center gap-1">
+                                  ★ Quórum 100%
                                 </span>
-                              ))}
+                              )}
                             </div>
-                          ) : (
-                            <p className="text-zinc-500 italic text-[11px]">Nadie ha confirmado aún.</p>
-                          )}
+                            {voterCount > 0 ? (
+                              <div className="flex flex-wrap gap-1.5">
+                                {voters.map((name) => (
+                                  <span
+                                    key={name}
+                                    className={`px-2.5 py-0.5 rounded-lg text-[11px] font-semibold border ${
+                                      name === selectedPlayer
+                                        ? "bg-amber-500/25 text-amber-200 border-amber-400/50 shadow-sm"
+                                        : "bg-emerald-500/20 text-emerald-200 border-emerald-400/40"
+                                    }`}
+                                  >
+                                    {name}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-zinc-500 italic text-[11px]">Nadie ha confirmado aún.</p>
+                            )}
+                          </div>
 
                           {totalParticipants - voterCount > 0 && (
-                            <>
-                              <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider pt-1">
+                            <div className="pt-1 border-t border-white/[0.06]">
+                              <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1.5">
                                 Faltan ({totalParticipants - voterCount}):
                               </div>
-                              <div className="flex flex-wrap gap-1">
+                              <div className="flex flex-wrap gap-1.5">
                                 {poll.participants
                                   .filter((p) => !voters.includes(p))
                                   .map((name) => (
                                     <span
                                       key={name}
-                                      className="px-2 py-0.5 rounded-lg bg-black/30 text-zinc-500 text-[11px] border border-white/[0.04]"
+                                      className="px-2 py-0.5 rounded-lg bg-zinc-900/90 text-zinc-400 text-[11px] font-medium border border-white/[0.08]"
                                     >
                                       {name}
                                     </span>
                                   ))}
                               </div>
-                            </>
+                            </div>
                           )}
                         </div>
                       </div>
