@@ -21,10 +21,13 @@ import { getSavedPolls, removeSavedPoll, saveCreatedPoll, SavedPoll } from "@/li
 import { supabase, Poll } from "@/lib/supabase";
 import { MONTH_NAMES, formatFriendlyDate } from "@/lib/calendarUtils";
 import { useLanguage } from "@/context/LanguageContext";
+import { useTutorial } from "@/context/TutorialContext";
+import TutorialCallout from "@/components/TutorialCallout";
 
 export default function MisMesasPage() {
   const router = useRouter();
   const { t, locale } = useLanguage();
+  const { triggerStep } = useTutorial();
   const [savedPolls, setSavedPolls] = useState<SavedPoll[]>([]);
   const [livePolls, setLivePolls] = useState<Record<string, Poll>>({});
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -77,6 +80,14 @@ export default function MisMesasPage() {
 
     fetchLiveDetails();
   }, [loadSavedPolls]);
+
+  // Disparar tutorial contextual en Mis Mesas
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      triggerStep("tables_hub");
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [triggerStep]);
 
   // Manejar desvinculación de una mesa
   const handleRemove = (slug: string, title: string) => {
@@ -163,7 +174,14 @@ export default function MisMesasPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-8">
       {/* Encabezado */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.08] pb-6">
+      <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.08] pb-6">
+        <TutorialCallout
+          stepId="tables_hub"
+          currentStepNumber={1}
+          totalSteps={1}
+          position="bottom"
+          align="start"
+        />
         <div>
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full liquid-glass-subtle text-amber-300 text-xs font-semibold mb-2 border border-white/10 shadow-sm">
             <Sparkles className="w-3.5 h-3.5 text-amber-400" />

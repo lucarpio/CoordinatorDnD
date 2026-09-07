@@ -20,10 +20,13 @@ import { supabase } from "@/lib/supabase";
 import { MONTH_NAMES } from "@/lib/calendarUtils";
 import { saveCreatedPoll, getSavedPolls, SavedPoll } from "@/lib/storage";
 import { useLanguage } from "@/context/LanguageContext";
+import { useTutorial } from "@/context/TutorialContext";
+import TutorialCallout from "@/components/TutorialCallout";
 
 export default function Home() {
   const router = useRouter();
   const { t, locale } = useLanguage();
+  const { triggerStep, completeStep } = useTutorial();
 
   // Fecha actual para valores predeterminados
   const today = new Date();
@@ -59,6 +62,14 @@ export default function Home() {
       window.removeEventListener("saved_polls_updated", handleUpdate);
     };
   }, []);
+
+  // Disparar tutorial contextual en la página de inicio
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      triggerStep("home_create");
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [triggerStep]);
 
   // Meses disponibles según el año seleccionado (no muestra meses pasados en el año actual)
   const availableMonths = useMemo(() => {
@@ -130,6 +141,7 @@ export default function Home() {
       return;
     }
 
+    completeStep("home_create");
     setIsLoading(true);
 
     try {
@@ -259,11 +271,20 @@ export default function Home() {
           </div>
         </div>
       ) : (
-        /* Formulario de Nueva Mesa */
-        <form
-          onSubmit={handleCreatePoll}
-          className="liquid-glass rounded-3xl p-6 sm:p-8 space-y-6 relative overflow-hidden"
-        >
+        <div className="relative">
+          <TutorialCallout
+            stepId="home_create"
+            currentStepNumber={1}
+            totalSteps={4}
+            position="top"
+            align="center"
+          />
+
+          {/* Formulario de Nueva Mesa */}
+          <form
+            onSubmit={handleCreatePoll}
+            className="liquid-glass rounded-3xl p-6 sm:p-8 space-y-6 relative overflow-hidden"
+          >
           {/* Sutil resplandor ámbar superior */}
           <div className="absolute -right-20 -top-20 w-52 h-52 bg-amber-500/[0.08] rounded-full blur-3xl pointer-events-none" />
 
@@ -398,6 +419,7 @@ export default function Home() {
             </button>
           </div>
         </form>
+      </div>
       )}
 
       {/* Sección de acceso directo a Mesas Guardadas si existen */}

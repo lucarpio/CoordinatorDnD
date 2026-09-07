@@ -36,7 +36,7 @@ export default function HeaderNav() {
     <div className="flex items-center gap-2 sm:gap-2.5">
       <Link
         href="/mis-mesas"
-        className={`px-3 sm:px-3.5 py-1.5 rounded-2xl text-xs font-semibold flex items-center gap-1.5 sm:gap-2 transition-all active:scale-95 ${
+        className={`whitespace-nowrap px-3 sm:px-3.5 py-1.5 rounded-2xl text-xs font-semibold flex items-center gap-1.5 sm:gap-2 transition-all active:scale-95 ${
           isMisMesas
             ? "ios-btn-amber text-zinc-950 font-bold shadow-md shadow-amber-500/20"
             : "liquid-glass-subtle text-zinc-300 hover:text-white"
@@ -59,7 +59,7 @@ export default function HeaderNav() {
 
       <Link
         href="/"
-        className={`px-3 sm:px-3.5 py-1.5 rounded-2xl text-xs font-semibold flex items-center gap-1.5 sm:gap-2 transition-all active:scale-95 ${
+        className={`whitespace-nowrap px-3 sm:px-3.5 py-1.5 rounded-2xl text-xs font-semibold flex items-center gap-1.5 sm:gap-2 transition-all active:scale-95 ${
           pathname === "/"
             ? "bg-white/[0.12] text-white border border-white/20 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)]"
             : "liquid-glass-subtle text-zinc-400 hover:text-zinc-200"
