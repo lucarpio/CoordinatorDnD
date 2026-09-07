@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import HeaderNav from "@/components/HeaderNav";
+import Footer from "@/components/Footer";
+import { LanguageProvider } from "@/context/LanguageContext";
+import { TutorialProvider } from "@/context/TutorialContext";
+import TutorialHelpModal from "@/components/TutorialHelpModal";
+import TutorialFloatingButton from "@/components/TutorialFloatingButton";
 
 export const metadata: Metadata = {
   metadataBase: new URL(
@@ -64,30 +69,34 @@ export default function RootLayout({
           <div className="absolute -bottom-24 right-[15%] w-[440px] h-[440px] bg-amber-600/[0.10] rounded-full blur-[140px]" />
         </div>
 
-        {/* Barra de Navegación Flotante estilo iOS Liquid Glass */}
-        <header className="sticky top-0 z-40 backdrop-blur-2xl bg-[#08090d]/65 border-b border-white/[0.08] shadow-[0_8px_24px_-4px_rgba(0,0,0,0.45)]">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between relative z-10">
-            <a href="/" className="flex items-center gap-2.5 group active:scale-95 transition-transform">
-              <span className="w-9 h-9 rounded-2xl bg-amber-500/15 border border-amber-400/30 flex items-center justify-center text-amber-400 group-hover:border-amber-400/60 shadow-[inset_0_1px_1px_rgba(255,255,255,0.25)] transition-all">
-                🎲
-              </span>
-              <span className="font-extrabold tracking-tight text-lg sm:text-xl text-zinc-100">
-                Coordinator<span className="text-amber-400">DnD</span>
-              </span>
-            </a>
-            <div className="flex items-center gap-3">
-              <HeaderNav />
-            </div>
-          </div>
-        </header>
+        <LanguageProvider>
+          <TutorialProvider>
+            {/* Barra de Navegación Flotante estilo iOS Liquid Glass */}
+            <header className="sticky top-0 z-40 backdrop-blur-2xl bg-[#08090d]/65 border-b border-white/[0.08] shadow-[0_8px_24px_-4px_rgba(0,0,0,0.45)]">
+              <div className="max-w-6xl mx-auto px-3 sm:px-6 h-16 flex items-center justify-between relative z-10">
+                <a href="/" className="flex items-center gap-2 sm:gap-2.5 group active:scale-95 transition-transform flex-shrink-0">
+                  <span className="w-8 h-8 sm:w-9 sm:h-9 rounded-2xl bg-amber-500/15 border border-amber-400/30 flex items-center justify-center text-amber-400 group-hover:border-amber-400/60 shadow-[inset_0_1px_1px_rgba(255,255,255,0.25)] transition-all flex-shrink-0">
+                    🎲
+                  </span>
+                  <span className="font-extrabold tracking-tight text-base sm:text-xl text-zinc-100 whitespace-nowrap">
+                    <span className="hidden sm:inline">Coordinator</span><span className="text-amber-400">DnD</span>
+                  </span>
+                </a>
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <HeaderNav />
+                </div>
+              </div>
+            </header>
 
-        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-12 relative z-10">
-          {children}
-        </main>
+            <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-12 relative z-10">
+              {children}
+            </main>
 
-        <footer className="border-t border-white/[0.06] mt-16 py-8 text-center text-xs text-zinc-500 relative z-10">
-          CoordinatorDnD • Diseñado para grupos de rol que sufren para coincidir fechas por WhatsApp.
-        </footer>
+            <Footer />
+            <TutorialFloatingButton />
+            <TutorialHelpModal />
+          </TutorialProvider>
+        </LanguageProvider>
       </body>
     </html>
   );

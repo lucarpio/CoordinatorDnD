@@ -11,18 +11,22 @@ import {
   ArrowRight,
   Copy,
   Check,
-  Share2,
   AlertCircle,
   Plus,
   X,
   BookmarkCheck,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { MONTH_NAMES_ES } from "@/lib/calendarUtils";
+import { MONTH_NAMES } from "@/lib/calendarUtils";
 import { saveCreatedPoll, getSavedPolls, SavedPoll } from "@/lib/storage";
+import { useLanguage } from "@/context/LanguageContext";
+import { useTutorial } from "@/context/TutorialContext";
+import TutorialCallout from "@/components/TutorialCallout";
 
 export default function Home() {
   const router = useRouter();
+  const { t, locale } = useLanguage();
+  const { triggerStep, completeStep } = useTutorial();
 
   // Fecha actual para valores predeterminados
   const today = new Date();
@@ -59,9 +63,18 @@ export default function Home() {
     };
   }, []);
 
+  // Disparar tutorial contextual en la página de inicio
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      triggerStep("home_create");
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [triggerStep]);
+
   // Meses disponibles según el año seleccionado (no muestra meses pasados en el año actual)
   const availableMonths = useMemo(() => {
-    return MONTH_NAMES_ES.map((name, idx) => ({
+    const names = MONTH_NAMES[locale] || MONTH_NAMES.es;
+    return names.map((name, idx) => ({
       index: idx + 1,
       name,
     })).filter((m) => {
@@ -70,7 +83,7 @@ export default function Home() {
       }
       return true;
     });
-  }, [year, currentYear, currentMonth]);
+  }, [year, currentYear, currentMonth, locale]);
 
   // Si cambia el año y el mes seleccionado quedó en el pasado, resetear al mes actual
   useEffect(() => {
@@ -119,21 +132,22 @@ export default function Home() {
     setErrorMessage("");
 
     if (!title.trim()) {
-      setErrorMessage("Por favor ingresa un título para la campaña o sesión.");
+      setErrorMessage(t("home.errorTitleRequired"));
       return;
     }
 
     if (participants.length < 2) {
-      setErrorMessage("Se necesitan al menos 2 participantes para coordinar una sesión.");
+      setErrorMessage(t("home.errorMinParticipants"));
       return;
     }
 
+    completeStep("home_create");
     setIsLoading(true);
 
     try {
       const slug = generateSlug(title);
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("polls")
         .insert({
           slug,
@@ -164,7 +178,7 @@ export default function Home() {
       console.error("Error creating poll:", err);
       setErrorMessage(
         err.message ||
-          "Ocurrió un error al crear la sala en Supabase. Verifica tu configuración y conexión."
+          "Error creating table in Supabase. Please check your connection."
       );
     } finally {
       setIsLoading(false);
@@ -181,7 +195,10 @@ export default function Home() {
   const handleCopyWhatsAppLink = () => {
     if (!createdRoom) return;
     const url = getShareableUrl(createdRoom.slug);
-    const text = `🎲⚔️ *¡Convocatoria D&D: ${createdRoom.title}!* ⚔️🎲\n\nPor favor entra al siguiente enlace y marca tus días disponibles para la sesión de este mes:\n👉 ${url}\n\n_(Nota: La sesión solo se confirmará si el 100% de la mesa coincide)_`;
+    const text =
+      locale === "en"
+        ? `🎲⚔️ *D&D Session Call: ${createdRoom.title}!* ⚔️🎲\n\nPlease join the room and mark your available days for this month's session:\n👉 ${url}\n\n_(Note: The session is only confirmed when 100% of the party matches)_`
+        : `🎲⚔️ *¡Convocatoria D&D: ${createdRoom.title}!* ⚔️🎲\n\nPor favor entra al siguiente enlace y marca tus días disponibles para la sesión de este mes:\n👉 ${url}\n\n_(Nota: La sesión solo se confirmará si el 100% de la mesa coincide)_`;
 
     navigator.clipboard.writeText(text);
     setCopiedLink(true);
@@ -194,17 +211,16 @@ export default function Home() {
       <div className="text-center space-y-4 pt-4">
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full liquid-glass-subtle text-amber-300 text-xs font-semibold tracking-wide border border-white/10 shadow-sm">
           <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-          Coordinación Sin Fricción • Zero Login
+          {t("home.badge")} • Zero Login
         </div>
         <h1 className="text-3xl sm:text-5xl font-extrabold text-zinc-100 tracking-tight">
-          Encuentra la fecha de tu próxima{" "}
+          {t("home.heroTitle")}{" "}
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 drop-shadow-sm">
-            Sesión de D&D
+            D&D
           </span>
         </h1>
         <p className="text-zinc-400 text-sm sm:text-base max-w-xl mx-auto leading-relaxed">
-          Crea una sala en 10 segundos, comparte el enlace en el grupo de WhatsApp y deja que
-          cada aventurero marque sus días. <strong>100% quórum garantizado.</strong>
+          {t("home.heroSubtitle")}
         </p>
       </div>
 
@@ -217,15 +233,15 @@ export default function Home() {
             <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-400/30 shadow-[inset_0_1px_1px_rgba(255,255,255,0.25)]">
               <Check className="w-7 h-7 stroke-[3]" />
             </div>
-            <h2 className="text-2xl font-black text-zinc-100 tracking-tight">¡Sala Creada con Éxito!</h2>
+            <h2 className="text-2xl font-black text-zinc-100 tracking-tight">{t("home.shareModalTitle")}</h2>
             <p className="text-sm text-zinc-400">
-              Campaña: <strong className="text-zinc-200">{createdRoom.title}</strong>
+              {t("home.campaignName")}: <strong className="text-zinc-200">{createdRoom.title}</strong>
             </p>
           </div>
 
           <div className="liquid-glass-subtle rounded-2xl p-4 space-y-2 border border-white/10">
             <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider block">
-              Enlace único para tu grupo:
+              {t("home.shareModalSubtitle")}
             </span>
             <div className="flex items-center gap-2">
               <input
@@ -243,23 +259,32 @@ export default function Home() {
               className="flex-1 px-4 py-3.5 ios-btn-emerald text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
             >
               <Copy className="w-4 h-4" />
-              {copiedLink ? "¡Mensaje Copiado para WhatsApp!" : "Copiar Enlace para WhatsApp"}
+              {copiedLink ? t("home.copied") : t("home.copyLink")}
             </button>
             <button
               onClick={() => router.push(`/m/${createdRoom.slug}`)}
               className="px-6 py-3.5 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-100 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] border border-white/15"
             >
-              Entrar al Tablero
+              {t("home.goToRoom")}
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         </div>
       ) : (
-        /* Formulario del DM */
-        <form
-          onSubmit={handleCreatePoll}
-          className="liquid-glass rounded-3xl p-6 sm:p-8 space-y-6 relative overflow-hidden"
-        >
+        <div className="relative">
+          <TutorialCallout
+            stepId="home_create"
+            currentStepNumber={1}
+            totalSteps={4}
+            position="top"
+            align="center"
+          />
+
+          {/* Formulario de Nueva Mesa */}
+          <form
+            onSubmit={handleCreatePoll}
+            className="liquid-glass rounded-3xl p-6 sm:p-8 space-y-6 relative overflow-hidden"
+          >
           {/* Sutil resplandor ámbar superior */}
           <div className="absolute -right-20 -top-20 w-52 h-52 bg-amber-500/[0.08] rounded-full blur-3xl pointer-events-none" />
 
@@ -273,16 +298,19 @@ export default function Home() {
           {/* Título de la campaña */}
           <div className="space-y-2">
             <label className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
-              Título de la Campaña / Aventura
+              {t("home.campaignName")}
             </label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Ej. La Maldición de Strahd, Mesa de los Viernes..."
+              placeholder={t("home.campaignPlaceholder")}
               required
               className="w-full liquid-glass-input rounded-2xl px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-500"
             />
+            <p className="text-[11px] text-zinc-500">
+              {t("home.campaignHelp")}
+            </p>
           </div>
 
           {/* Mes y Año */}
@@ -290,7 +318,7 @@ export default function Home() {
             <div className="space-y-2">
               <label className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5 text-amber-400" />
-                Mes a Coordinar
+                {t("home.monthLabel")}
               </label>
               <select
                 value={month}
@@ -307,7 +335,7 @@ export default function Home() {
 
             <div className="space-y-2">
               <label className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
-                Año
+                {t("home.yearLabel")}
               </label>
               <select
                 value={year}
@@ -328,10 +356,10 @@ export default function Home() {
             <label className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
               <span className="flex items-center gap-1.5">
                 <Users className="w-3.5 h-3.5 text-amber-400" />
-                Participantes de la mesa (Total: {participants.length})
+                {t("home.participantsLabel")} ({participants.length})
               </span>
               <span className="text-[11px] text-zinc-500 font-normal">
-                (Mínimo 2: DM y jugadores)
+                (Min 2)
               </span>
             </label>
 
@@ -341,7 +369,7 @@ export default function Home() {
                 value={participantInput}
                 onChange={(e) => setParticipantInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Nombre o personaje (Enter para agregar)..."
+                placeholder={t("home.participantPlaceholder")}
                 className="flex-1 liquid-glass-input rounded-2xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500"
               />
               <button
@@ -350,14 +378,14 @@ export default function Home() {
                 className="px-4 py-2.5 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-200 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all border border-white/10 active:scale-95"
               >
                 <Plus className="w-4 h-4" />
-                Agregar
+                {t("home.addBtn")}
               </button>
             </div>
 
             {/* Tags de participantes */}
             {participants.length === 0 ? (
               <div className="p-4 rounded-2xl border border-dashed border-white/10 bg-white/[0.02] text-center text-xs text-zinc-500 backdrop-blur-sm">
-                Aún no has agregado participantes. Escribe el nombre o personaje arriba y pulsa Enter o Agregar.
+                {t("home.emptyParticipants")}
               </div>
             ) : (
               <div className="flex flex-wrap gap-2 pt-1">
@@ -387,10 +415,11 @@ export default function Home() {
               className="w-full py-4 ios-btn-amber text-zinc-950 font-black text-sm uppercase tracking-wider rounded-2xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98]"
             >
               <Dices className="w-5 h-5" />
-              {isLoading ? "Creando Sala..." : "Crear Sala y Generar Enlace"}
+              {isLoading ? t("home.creatingBtn") : t("home.submitBtn")}
             </button>
           </div>
         </form>
+      </div>
       )}
 
       {/* Sección de acceso directo a Mesas Guardadas si existen */}
@@ -400,21 +429,21 @@ export default function Home() {
             <div className="flex items-center gap-2">
               <BookmarkCheck className="w-5 h-5 text-amber-400" />
               <h2 className="text-base sm:text-lg font-bold text-zinc-100 tracking-tight">
-                Tus Mesas Creadas ({savedPolls.length})
+                {t("home.recentPollsTitle")} ({savedPolls.length})
               </h2>
             </div>
             <Link
               href="/mis-mesas"
               className="text-xs font-semibold text-amber-400 hover:text-amber-300 flex items-center gap-1 transition-colors"
             >
-              Ver todas
+              {t("home.viewAll")}
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {savedPolls.slice(0, 4).map((poll) => {
-              const monthName = MONTH_NAMES_ES[poll.month - 1] || "Mes";
+              const monthName = MONTH_NAMES[locale][poll.month - 1] || "Mes";
               return (
                 <Link
                   key={poll.slug}

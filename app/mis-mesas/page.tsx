@@ -15,16 +15,19 @@ import {
   Sparkles,
   Link as LinkIcon,
   AlertCircle,
-  ExternalLink,
-  ShieldAlert,
   Shield,
 } from "lucide-react";
 import { getSavedPolls, removeSavedPoll, saveCreatedPoll, SavedPoll } from "@/lib/storage";
 import { supabase, Poll } from "@/lib/supabase";
-import { MONTH_NAMES_ES, formatFriendlyDate } from "@/lib/calendarUtils";
+import { MONTH_NAMES, formatFriendlyDate } from "@/lib/calendarUtils";
+import { useLanguage } from "@/context/LanguageContext";
+import { useTutorial } from "@/context/TutorialContext";
+import TutorialCallout from "@/components/TutorialCallout";
 
 export default function MisMesasPage() {
   const router = useRouter();
+  const { t, locale } = useLanguage();
+  const { triggerStep } = useTutorial();
   const [savedPolls, setSavedPolls] = useState<SavedPoll[]>([]);
   const [livePolls, setLivePolls] = useState<Record<string, Poll>>({});
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -78,11 +81,22 @@ export default function MisMesasPage() {
     fetchLiveDetails();
   }, [loadSavedPolls]);
 
+  // Disparar tutorial contextual en Mis Mesas
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      triggerStep("tables_hub");
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [triggerStep]);
+
   // Manejar desvinculación de una mesa
   const handleRemove = (slug: string, title: string) => {
-    const confirmed = window.confirm(
-      `¿Deseas quitar la mesa "${title}" de tu lista local?\n\n(No borrará los datos del servidor, solo dejará de mostrarse en tu navegador)`
-    );
+    const message =
+      locale === "en"
+        ? `Do you want to remove "${title}" from your local list?\n\n(This will not delete data from the server, it only removes it from this browser)`
+        : `¿Deseas quitar la mesa "${title}" de tu lista local?\n\n(No borrará los datos del servidor, solo dejará de mostrarse en tu navegador)`;
+
+    const confirmed = window.confirm(message);
     if (!confirmed) return;
 
     removeSavedPoll(slug);
@@ -93,7 +107,10 @@ export default function MisMesasPage() {
   const handleCopyWhatsApp = (slug: string, title: string) => {
     const origin = typeof window !== "undefined" ? window.location.origin : "";
     const url = `${origin}/m/${slug}`;
-    const text = `🎲⚔️ *¡Convocatoria D&D: ${title}!* ⚔️🎲\n\nPor favor entra al siguiente enlace y marca tus días disponibles para la sesión:\n👉 ${url}\n\n_(Nota: La sesión solo se confirmará si el 100% de la mesa coincide)_`;
+    const text =
+      locale === "en"
+        ? `🎲⚔️ *D&D Session Call: ${title}!* ⚔️🎲\n\nPlease join the room and mark your available days for the session:\n👉 ${url}\n\n_(Note: The session is only confirmed when 100% of the party matches)_`
+        : `🎲⚔️ *¡Convocatoria D&D: ${title}!* ⚔️🎲\n\nPor favor entra al siguiente enlace y marca tus días disponibles para la sesión:\n👉 ${url}\n\n_(Nota: La sesión solo se confirmará si el 100% de la mesa coincide)_`;
 
     navigator.clipboard.writeText(text);
     setCopiedSlug(slug);
@@ -125,7 +142,7 @@ export default function MisMesasPage() {
         .single();
 
       if (error || !data) {
-        setImportError("No se encontró ninguna mesa con ese código o enlace.");
+        setImportError(t("misMesas.importError"));
         return;
       }
 
@@ -141,10 +158,14 @@ export default function MisMesasPage() {
 
       setLivePolls((prev) => ({ ...prev, [pollData.slug]: pollData }));
       setSavedPolls(getSavedPolls());
-      setImportSuccess(`¡Mesa "${pollData.title}" vinculada con éxito!`);
+      setImportSuccess(
+        locale === "en"
+          ? `Table "${pollData.title}" linked successfully!`
+          : `¡Mesa "${pollData.title}" vinculada con éxito!`
+      );
       setImportInput("");
     } catch (err: any) {
-      setImportError(err.message || "Error al buscar la mesa.");
+      setImportError(err.message || t("misMesas.importError"));
     } finally {
       setImportLoading(false);
     }
@@ -153,17 +174,24 @@ export default function MisMesasPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-8">
       {/* Encabezado */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.08] pb-6">
+      <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.08] pb-6">
+        <TutorialCallout
+          stepId="tables_hub"
+          currentStepNumber={1}
+          totalSteps={1}
+          position="bottom"
+          align="start"
+        />
         <div>
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full liquid-glass-subtle text-amber-300 text-xs font-semibold mb-2 border border-white/10 shadow-sm">
             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            Panel Personal de Mesas
+            {locale === "en" ? "Personal Tables Dashboard" : "Panel Personal de Mesas"}
           </div>
           <h1 className="text-3xl sm:text-4xl font-extrabold text-zinc-100 tracking-tight">
-            Tus Mesas Creadas
+            {t("misMesas.title")}
           </h1>
           <p className="text-zinc-400 text-sm mt-1">
-            Accede a las salas que has creado o guardado en este navegador.
+            {t("misMesas.subtitle")}
           </p>
         </div>
 
@@ -172,7 +200,7 @@ export default function MisMesasPage() {
           className="inline-flex items-center justify-center gap-2 px-4 py-2.5 ios-btn-amber text-zinc-950 font-black text-sm rounded-2xl active:scale-95 transition-all shadow-md shadow-amber-500/20"
         >
           <PlusCircle className="w-4 h-4" />
-          Crear Nueva Mesa
+          {t("nav.newPoll")}
         </Link>
       </div>
 
@@ -183,10 +211,9 @@ export default function MisMesasPage() {
             <Dices className="w-8 h-8" />
           </div>
           <div className="space-y-2 max-w-md mx-auto">
-            <h3 className="text-xl font-bold text-zinc-100 tracking-tight">Aún no tienes mesas registradas</h3>
+            <h3 className="text-xl font-bold text-zinc-100 tracking-tight">{t("misMesas.emptyTitle")}</h3>
             <p className="text-zinc-400 text-xs sm:text-sm leading-relaxed">
-              Crea tu primera sala de coordinación en menos de 10 segundos o vincula una mesa que
-              hayas creado anteriormente con su enlace.
+              {t("misMesas.emptySubtitle")}
             </p>
           </div>
           <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
@@ -195,7 +222,7 @@ export default function MisMesasPage() {
               className="w-full sm:w-auto px-6 py-3.5 ios-btn-amber text-zinc-950 font-extrabold text-sm rounded-2xl transition-all flex items-center justify-center gap-2 active:scale-95"
             >
               <PlusCircle className="w-4 h-4" />
-              Crear una Mesa Ahora
+              {t("misMesas.createNewBtn")}
             </Link>
           </div>
         </div>
@@ -206,7 +233,7 @@ export default function MisMesasPage() {
             const title = live?.title || saved.title;
             const year = live?.year || saved.year;
             const month = live?.month || saved.month;
-            const monthName = MONTH_NAMES_ES[month - 1] || "Mes";
+            const monthName = MONTH_NAMES[locale][month - 1] || "Month";
             const participants = live?.participants || [];
             const totalParticipants = participants.length || saved.participantsCount || 0;
 
@@ -242,22 +269,24 @@ export default function MisMesasPage() {
                         <>
                           <span className="flex items-center gap-1.5 text-amber-300 font-bold bg-amber-500/15 px-2.5 py-0.5 rounded-xl border border-amber-400/30">
                             <Shield className="w-3.5 h-3.5" />
-                            Personaje: {saved.myCharacter}
+                            {locale === "en" ? "Character:" : "Personaje:"} {saved.myCharacter}
                           </span>
                           <span>•</span>
                         </>
                       )}
                       <span className="flex items-center gap-1.5 text-zinc-300 font-medium">
                         <Users className="w-3.5 h-3.5 text-amber-400" />
-                        {totalParticipants} participantes
+                        {totalParticipants} {locale === "en" ? "participants" : "participantes"}
                       </span>
                       <span>•</span>
-                      <span>Horario: 8:30 PM</span>
+                      <span>{locale === "en" ? "Time: 8:30 PM" : "Horario: 8:30 PM"}</span>
                       {saved.createdAt && (
                         <>
                           <span>•</span>
                           <span className="text-zinc-500">
-                            Creada el {new Date(saved.createdAt).toLocaleDateString("es-ES")}
+                            {locale === "en"
+                              ? `Created ${new Date(saved.createdAt).toLocaleDateString("en-US")}`
+                              : `Creada el ${new Date(saved.createdAt).toLocaleDateString("es-ES")}`}
                           </span>
                         </>
                       )}
@@ -269,12 +298,13 @@ export default function MisMesasPage() {
                     {confirmedDates.length > 0 ? (
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-xs font-bold animate-pulse shadow-sm">
                         <Sparkles className="w-3.5 h-3.5" />
-                        ¡{confirmedDates.length}{" "}
-                        {confirmedDates.length === 1 ? "fecha confirmada" : "fechas confirmadas"}!
+                        {locale === "en"
+                          ? `★ ${confirmedDates.length} ${confirmedDates.length === 1 ? "date confirmed!" : "dates confirmed!"}`
+                          : `¡${confirmedDates.length} ${confirmedDates.length === 1 ? "fecha confirmada" : "fechas confirmadas"}!`}
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full liquid-glass-subtle text-zinc-400 text-xs font-medium border border-white/10">
-                        En votación
+                        {locale === "en" ? "Voting in progress" : "En votación"}
                       </span>
                     )}
                   </div>
@@ -283,13 +313,15 @@ export default function MisMesasPage() {
                 {/* Si hay fechas confirmadas, mostrarlas resumidas */}
                 {confirmedDates.length > 0 && (
                   <div className="bg-emerald-950/40 border border-emerald-500/30 backdrop-blur-md rounded-2xl p-3 flex flex-wrap items-center gap-2 text-xs text-emerald-200">
-                    <span className="font-bold text-emerald-300">Coincidencia total en:</span>
+                    <span className="font-bold text-emerald-300">
+                      {locale === "en" ? "100% Quorum on:" : "Coincidencia total en:"}
+                    </span>
                     {confirmedDates.map((d) => (
                       <span
                         key={d}
                         className="px-2.5 py-0.5 rounded-xl bg-emerald-500/20 border border-emerald-400/30 font-semibold"
                       >
-                        {formatFriendlyDate(d)}
+                        {formatFriendlyDate(d, locale)}
                       </span>
                     ))}
                   </div>
@@ -305,12 +337,12 @@ export default function MisMesasPage() {
                       {copiedSlug === saved.slug ? (
                         <>
                           <Check className="w-3.5 h-3.5 text-emerald-400" />
-                          <span className="text-emerald-400 font-bold">¡Enlace Copiado!</span>
+                          <span className="text-emerald-400 font-bold">{t("home.copied")}</span>
                         </>
                       ) : (
                         <>
                           <Copy className="w-3.5 h-3.5" />
-                          <span>Copiar para WhatsApp</span>
+                          <span>{t("scheduler.whatsAppBtn")}</span>
                         </>
                       )}
                     </button>
@@ -318,7 +350,7 @@ export default function MisMesasPage() {
                     <button
                       onClick={() => handleRemove(saved.slug, title)}
                       className="p-2.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-2xl transition-all"
-                      title="Quitar de mi lista"
+                      title={t("misMesas.confirmDelete")}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -328,7 +360,7 @@ export default function MisMesasPage() {
                     onClick={() => router.push(`/m/${saved.slug}`)}
                     className="px-4 py-2.5 ios-btn-amber text-zinc-950 rounded-2xl text-xs font-black flex items-center gap-1.5 transition-all shadow-md shadow-amber-500/15 active:scale-95"
                   >
-                    <span>Entrar al Tablero</span>
+                    <span>{t("home.goToRoom")}</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -342,11 +374,12 @@ export default function MisMesasPage() {
       <div className="liquid-glass-subtle rounded-3xl p-5 sm:p-6 space-y-3 border border-white/10">
         <h3 className="text-sm font-bold text-zinc-200 flex items-center gap-2">
           <LinkIcon className="w-4 h-4 text-amber-400" />
-          ¿Creaste una mesa en otro dispositivo o perdiste el acceso?
+          {t("misMesas.importTitle")}
         </h3>
         <p className="text-xs text-zinc-400">
-          Pega aquí el enlace o código (slug) de tu mesa para añadirla a tu lista personal en este
-          navegador.
+          {locale === "en"
+            ? "Paste the link or code (slug) of your table here to add it to your personal list on this browser."
+            : "Pega aquí el enlace o código (slug) de tu mesa para añadirla a tu lista personal en este navegador."}
         </p>
 
         <form onSubmit={handleImportPoll} className="flex flex-col sm:flex-row gap-2.5 pt-1">
@@ -354,7 +387,7 @@ export default function MisMesasPage() {
             type="text"
             value={importInput}
             onChange={(e) => setImportInput(e.target.value)}
-            placeholder="Ej. mi-campana-abcde o https://.../m/mi-campana-abcde"
+            placeholder={t("misMesas.importPlaceholder")}
             className="flex-1 liquid-glass-input rounded-2xl px-4 py-2.5 text-xs sm:text-sm text-zinc-100 placeholder:text-zinc-500"
           />
           <button
@@ -362,7 +395,7 @@ export default function MisMesasPage() {
             disabled={importLoading || !importInput.trim()}
             className="px-4 py-2.5 liquid-glass-subtle hover:bg-white/[0.12] disabled:opacity-50 text-zinc-200 rounded-2xl text-xs font-bold transition-all border border-white/15 flex items-center justify-center gap-1.5 active:scale-95"
           >
-            {importLoading ? "Buscando..." : "Vincular Mesa"}
+            {importLoading ? t("common.loading") : t("misMesas.importBtn")}
           </button>
         </form>
 
