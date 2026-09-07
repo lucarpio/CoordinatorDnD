@@ -42,6 +42,8 @@ import {
   SupportedLocale,
 } from "@/lib/calendarUtils";
 import { useLanguage } from "@/context/LanguageContext";
+import { useTutorial } from "@/context/TutorialContext";
+import TutorialCallout from "@/components/TutorialCallout";
 
 const WEEKDAY_NAMES_SHORT: Record<SupportedLocale, string[]> = {
   es: ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"],
@@ -60,6 +62,7 @@ export default function MonthScheduler({
   isRealtimeConnected,
 }: MonthSchedulerProps) {
   const { t, locale } = useLanguage();
+  const { triggerStep, completeStep, isStepCompleted } = useTutorial();
   const [poll, setPoll] = useState<Poll>(initialPoll);
   const [selectedPlayer, setSelectedPlayer] = useState<string>("");
   const [showClaimModal, setShowClaimModal] = useState<boolean>(false);
@@ -176,15 +179,21 @@ export default function MonthScheduler({
     const savedPlayer = localStorage.getItem(storageKey);
     if (savedPlayer && poll.participants.includes(savedPlayer)) {
       setSelectedPlayer(savedPlayer);
+      if (!isStepCompleted("room_vote")) {
+        const timer = setTimeout(() => triggerStep("room_vote"), 600);
+        return () => clearTimeout(timer);
+      }
     } else {
       const isSpectatorSession = sessionStorage.getItem(`dnd_spectator_${poll.slug}`);
       if (isSpectatorSession) {
         setIsSpectator(true);
       } else {
         setShowClaimModal(true);
+        const timer = setTimeout(() => triggerStep("room_claim"), 600);
+        return () => clearTimeout(timer);
       }
     }
-  }, [poll.slug, poll.participants]);
+  }, [poll.slug, poll.participants, triggerStep, isStepCompleted]);
 
   const handleClaimPlayer = (player: string) => {
     setSelectedPlayer(player);
@@ -203,6 +212,11 @@ export default function MonthScheduler({
       participantsCount: poll.participants.length,
       myCharacter: player,
     });
+
+    completeStep("room_claim");
+    setTimeout(() => {
+      triggerStep("room_vote");
+    }, 400);
   };
 
   const handleEnterAsSpectator = () => {
@@ -210,6 +224,11 @@ export default function MonthScheduler({
     setIsSpectator(true);
     setShowClaimModal(false);
     sessionStorage.setItem(`dnd_spectator_${poll.slug}`, "true");
+
+    completeStep("room_claim");
+    setTimeout(() => {
+      triggerStep("room_views");
+    }, 400);
   };
 
   const handleOpenClaimModal = () => {
@@ -349,7 +368,25 @@ export default function MonthScheduler({
 
     // 4. Guardado debounced (agrupa clics seguidos en una sola petición)
     triggerDebouncedSave(nextAvailability);
+
+    // 5. Progreso del tutorial interactivo
+    completeStep("room_vote");
+    if (!isStepCompleted("room_views")) {
+      setTimeout(() => {
+        triggerStep("room_views");
+      }, 600);
+    }
   };
+
+  // Disparar tip de exportación cuando se alcance al menos 1 fecha con quórum 100%
+  useEffect(() => {
+    if (confirmedDates.length > 0 && !isStepCompleted("room_export")) {
+      const timer = setTimeout(() => {
+        triggerStep("room_export");
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [confirmedDates.length, isStepCompleted, triggerStep]);
 
 
   const handleCopyWhatsApp = () => {
@@ -443,7 +480,15 @@ export default function MonthScheduler({
           </div>
 
           {/* Tarjeta de Identidad del Jugador / Modo Espectador */}
-          <div className="liquid-glass-subtle rounded-3xl p-4 min-w-[280px] sm:min-w-[320px] border border-white/10 shadow-sm">
+          <div className="relative liquid-glass-subtle rounded-3xl p-4 min-w-[280px] sm:min-w-[320px] border border-white/10 shadow-sm">
+            <TutorialCallout
+              stepId="room_claim"
+              currentStepNumber={1}
+              totalSteps={4}
+              position="bottom"
+              align="end"
+              onNext={handleOpenClaimModal}
+            />
             {selectedPlayer ? (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -592,7 +637,15 @@ export default function MonthScheduler({
       )}
 
       {/* Calendario Mensual */}
-      <div className="liquid-glass rounded-3xl p-4 sm:p-6 shadow-2xl space-y-4">
+      <div className="relative liquid-glass rounded-3xl p-4 sm:p-6 shadow-2xl space-y-4">
+        <TutorialCallout
+          stepId="room_vote"
+          currentStepNumber={2}
+          totalSteps={4}
+          position="top"
+          align="start"
+        />
+
         {/* Cabecera del Calendario + Selector de Vista estilo iOS Segmented Control */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center justify-between w-full sm:w-auto">
@@ -602,10 +655,20 @@ export default function MonthScheduler({
             </h2>
 
             {/* Selector de Vista en Mobile (Segmented Control estilo iOS) */}
-            <div className="sm:hidden flex items-center gap-1 ios-segmented-control p-1 rounded-2xl">
+            <div className="relative sm:hidden flex items-center gap-1 ios-segmented-control p-1 rounded-2xl">
+              <TutorialCallout
+                stepId="room_views"
+                currentStepNumber={3}
+                totalSteps={4}
+                position="bottom"
+                align="end"
+              />
               <button
                 type="button"
-                onClick={() => setViewMode("list")}
+                onClick={() => {
+                  setViewMode("list");
+                  completeStep("room_views");
+                }}
                 className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${
                   viewMode === "list"
                     ? "ios-segmented-active"
@@ -643,10 +706,20 @@ export default function MonthScheduler({
               <span className="font-medium">{t("scheduler.yourVoteLegend")}</span>
             </div>
 
-            <div className="flex items-center gap-1 ios-segmented-control p-1 rounded-2xl ml-2">
+            <div className="relative flex items-center gap-1 ios-segmented-control p-1 rounded-2xl ml-2">
+              <TutorialCallout
+                stepId="room_views"
+                currentStepNumber={3}
+                totalSteps={4}
+                position="bottom"
+                align="end"
+              />
               <button
                 type="button"
-                onClick={() => setViewMode("grid")}
+                onClick={() => {
+                  setViewMode("grid");
+                  completeStep("room_views");
+                }}
                 className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${
                   viewMode === "grid"
                     ? "ios-segmented-active"
@@ -658,7 +731,10 @@ export default function MonthScheduler({
               </button>
               <button
                 type="button"
-                onClick={() => setViewMode("list")}
+                onClick={() => {
+                  setViewMode("list");
+                  completeStep("room_views");
+                }}
                 className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${
                   viewMode === "list"
                     ? "ios-segmented-active"
@@ -1170,7 +1246,14 @@ export default function MonthScheduler({
       </div>
 
       {/* Barra de Acciones de Exportación estilo iOS Liquid Glass */}
-      <div className="liquid-glass rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+      <div className="relative liquid-glass rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+        <TutorialCallout
+          stepId="room_export"
+          currentStepNumber={4}
+          totalSteps={4}
+          position="top"
+          align="start"
+        />
         <div>
           <h3 className="text-base font-black text-zinc-100 flex items-center gap-2.5 tracking-tight">
             <Share2 className="w-4 h-4 text-amber-400" />

@@ -140,5 +140,52 @@
     "delete": "Delete",
     "copy": "Copy",
     "copied": "Copied!"
+  },
+  "tutorial": {
+    "badge": "Tutorial",
+    "stepCount": "Step {current} of {total}",
+    "gotIt": "Got it",
+    "next": "Next",
+    "dismiss": "Dismiss tips",
+    "helpTitle": "Quick Guide",
+    "helpSubtitle": "Learn how to schedule your tabletop RPG sessions in minutes",
+    "resetTutorialBtn": "Restart Tutorial",
+    "resetSuccess": "Tutorial restarted! Tips will appear as you navigate.",
+    "steps": {
+      "home_create": {
+        "title": "Create your first game table!",
+        "desc": "Pick the target month and enter the adventurers' names. Clicking 'Create Monthly Poll' generates a unique shareable link."
+      },
+      "room_claim": {
+        "title": "Choose your character",
+        "desc": "Click here to pick your adventurer or join as a spectator. This lets you mark your available days."
+      },
+      "room_vote": {
+        "title": "Mark your free days!",
+        "desc": "Click on any day in the calendar to indicate you can play. Your votes sync instantly in real time."
+      },
+      "room_views": {
+        "title": "Views and quick filters",
+        "desc": "Switch between 'Month' grid and mobile 'Agenda' view. Use quick filters to focus on weekends or upcoming dates."
+      },
+      "room_export": {
+        "title": "Export when quorum is reached",
+        "desc": "When everyone is free on the same day (100% quorum), copy a markdown party summary for WhatsApp or add the session directly to Google Calendar or .ics."
+      },
+      "tables_hub": {
+        "title": "Your saved tables",
+        "desc": "Rooms you create or visit are automatically remembered on your device so you never lose track of active campaigns."
+      }
+    },
+    "guideItems": {
+      "item1Title": "1. Create or join a room",
+      "item1Desc": "No login required. Share the room link with your gaming party over WhatsApp",
+      "item2Title": "2. Select your character",
+      "item2Desc": "Each adventurer claims their name so the party sees who is available on each date.",
+      "item3Title": "3. Mark availability live",
+      "item3Desc": "Tap your free days. Changes update in real time for everyone in the room.",
+      "item4Title": "4. 100% Quorum = Game On!",
+      "item4Desc": "The app highlights dates where everyone can make it and generates direct calendar links."
+    }
   }
 }

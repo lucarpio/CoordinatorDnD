@@ -140,5 +140,52 @@
     "delete": "Eliminar",
     "copy": "Copiar",
     "copied": "¡Copiado!"
+  },
+  "tutorial": {
+    "badge": "Tutorial",
+    "stepCount": "Paso {current} de {total}",
+    "gotIt": "Entendido",
+    "next": "Siguiente",
+    "dismiss": "Omitir tips",
+    "helpTitle": "Guía Rápida",
+    "helpSubtitle": "Aprende cómo organizar tus partidas de rol en minutos",
+    "resetTutorialBtn": "Reiniciar Tutorial",
+    "resetSuccess": "¡Tutorial reactivado! Los tips volverán a aparecer.",
+    "steps": {
+      "home_create": {
+        "title": "¡Crea tu primera mesa de rol!",
+        "desc": "Elige el mes en el que jugarán y escribe los nombres de los aventureros. Al presionar 'Crear Encuesta Mensual' se generará un enlace único para compartir."
+      },
+      "room_claim": {
+        "title": "Elige a tu personaje",
+        "desc": "Toca aquí para seleccionar a tu aventurero o entrar como espectador. Esto te permitirá marcar tus días disponibles."
+      },
+      "room_vote": {
+        "title": "¡Marca tus días libres!",
+        "desc": "Haz clic en cualquier día del calendario para indicar que puedes jugar esa fecha. Tus votos se sincronizan al instante en vivo."
+      },
+      "room_views": {
+        "title": "Vistas y filtros rápidos",
+        "desc": "Alterna entre la cuadrícula de 'Mes' y la vista de 'Agenda' móvil. Usa los filtros para revisar rápidamente los fines de semana."
+      },
+      "room_export": {
+        "title": "Exporta cuando haya quórum",
+        "desc": "Cuando todos los aventureros coinciden en un día (100% quórum), puedes copiar el resumen formateado para WhatsApp o agendar la sesión directamente en Google Calendar o .ics."
+      },
+      "tables_hub": {
+        "title": "Tus mesas guardadas",
+        "desc": "Las salas que creas o visitas se guardan automáticamente en tu dispositivo para que no pierdas tus campañas activas."
+      }
+    },
+    "guideItems": {
+      "item1Title": "1. Crea o entra a una sala",
+      "item1Desc": "No necesitas registro. Comparte el enlace de la sala con tu grupo de rol por WhatsApp",
+      "item2Title": "2. Selecciona tu personaje",
+      "item2Desc": "Cada jugador elige su nombre para que el grupo vea quién puede jugar cada fecha.",
+      "item3Title": "3. Marca tu disponibilidad en vivo",
+      "item3Desc": "Toca los días libres. Los cambios se actualizan en tiempo real para todos los participantes.",
+      "item4Title": "4. ¡100% de Quórum = Partida!",
+      "item4Desc": "La app resalta las fechas en que todo el grupo coincide y genera enlaces directos a calendarios."
+    }
   }
 }
