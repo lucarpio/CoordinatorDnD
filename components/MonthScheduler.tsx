@@ -30,8 +30,8 @@ import ClaimCharacterModal from "@/components/ClaimCharacterModal";
 import { saveCreatedPoll } from "@/lib/storage";
 import {
   getMonthDays,
-  MONTH_NAMES_ES,
-  WEEKDAYS_ES,
+  MONTH_NAMES,
+  WEEKDAYS,
   formatFriendlyDate,
   formatDateKey,
   generateWhatsAppSummary,
@@ -39,9 +39,14 @@ import {
   generateIcsContent,
   downloadIcsFile,
   CalendarDay,
+  SupportedLocale,
 } from "@/lib/calendarUtils";
+import { useLanguage } from "@/context/LanguageContext";
 
-const WEEKDAY_NAMES_SHORT = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+const WEEKDAY_NAMES_SHORT: Record<SupportedLocale, string[]> = {
+  es: ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"],
+  en: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+};
 
 interface MonthSchedulerProps {
   initialPoll: Poll;
@@ -54,6 +59,7 @@ export default function MonthScheduler({
   onUpdateAvailability,
   isRealtimeConnected,
 }: MonthSchedulerProps) {
+  const { t, locale } = useLanguage();
   const [poll, setPoll] = useState<Poll>(initialPoll);
   const [selectedPlayer, setSelectedPlayer] = useState<string>("");
   const [showClaimModal, setShowClaimModal] = useState<boolean>(false);
@@ -354,7 +360,8 @@ export default function MonthScheduler({
       poll.month,
       poll.participants,
       confirmedDates,
-      currentUrl
+      currentUrl,
+      locale
     );
 
     navigator.clipboard.writeText(summary);
@@ -364,15 +371,15 @@ export default function MonthScheduler({
 
   const handleDownloadIcs = () => {
     if (confirmedDates.length === 0) {
-      alert("Aún no hay fechas confirmadas con el 100% de quórum para exportar.");
+      alert(t("scheduler.noQuorumDays"));
       return;
     }
-    const icsString = generateIcsContent(poll.title, confirmedDates);
+    const icsString = generateIcsContent(poll.title, confirmedDates, locale);
     const filename = `dnd-${poll.slug}-sesiones.ics`;
     downloadIcsFile(filename, icsString);
   };
 
-  const monthLabel = `${MONTH_NAMES_ES[poll.month - 1]} ${poll.year}`;
+  const monthLabel = `${MONTH_NAMES[locale][poll.month - 1]} ${poll.year}`;
 
   return (
     <div className="w-full max-w-5xl mx-auto space-y-6">
@@ -389,7 +396,7 @@ export default function MonthScheduler({
               </span>
               <div>
                 <span className="text-[11px] uppercase tracking-widest text-amber-400 font-bold">
-                  Campaña D&D
+                  {locale === "en" ? "D&D Campaign" : "Campaña D&D"}
                 </span>
                 <h1 className="text-2xl sm:text-3xl font-black text-zinc-100 tracking-tight">
                   {poll.title}
@@ -404,11 +411,11 @@ export default function MonthScheduler({
               </span>
               <span className="flex items-center gap-1.5 font-semibold text-zinc-200 liquid-glass-subtle px-3 py-1 rounded-full border border-white/10">
                 <Users className="w-3.5 h-3.5 text-amber-400" />
-                {totalParticipants} participantes
+                {totalParticipants} {locale === "en" ? "participants" : "participantes"}
               </span>
               <span className="text-zinc-500 hidden sm:inline">•</span>
               <span className="text-zinc-300 font-medium">
-                ⏰ Horario: <strong className="text-zinc-100 font-bold">8:30 PM</strong>
+                ⏰ {locale === "en" ? "Time:" : "Horario:"} <strong className="text-zinc-100 font-bold">8:30 PM</strong>
               </span>
               <div className="flex items-center gap-1.5 ml-auto sm:ml-0 liquid-glass-subtle px-3 py-1 rounded-full border border-white/10">
                 <Radio
@@ -417,12 +424,18 @@ export default function MonthScheduler({
                   }`}
                 />
                 <span className="text-xs font-medium text-zinc-300">
-                  {isRealtimeConnected ? "En vivo" : "Conectando..."}
+                  {isRealtimeConnected
+                    ? locale === "en"
+                      ? "Live"
+                      : "En vivo"
+                    : locale === "en"
+                    ? "Connecting..."
+                    : "Conectando..."}
                 </span>
                 {isUpdating && (
                   <span className="flex items-center gap-1 text-xs text-amber-300 font-bold ml-2 animate-pulse">
                     <Loader2 className="w-3 h-3 animate-spin" />
-                    Guardando...
+                    {locale === "en" ? "Saving..." : "Guardando..."}
                   </span>
                 )}
               </div>
@@ -436,14 +449,14 @@ export default function MonthScheduler({
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
                     <Shield className="w-3.5 h-3.5 text-amber-400" />
-                    Tu Calendario Personal
+                    {locale === "en" ? "Your Personal Calendar" : "Tu Calendario Personal"}
                   </span>
                   <button
                     type="button"
                     onClick={handleOpenClaimModal}
                     className="text-[11px] font-bold text-zinc-400 hover:text-amber-300 underline decoration-zinc-700 hover:decoration-amber-300 transition-colors active:scale-95"
                   >
-                    Cambiar
+                    {locale === "en" ? "Change" : "Cambiar"}
                   </button>
                 </div>
 
@@ -457,19 +470,30 @@ export default function MonthScheduler({
                         {selectedPlayer}
                       </span>
                       <span className="text-[11px] text-zinc-400">
-                        {playerMarkedDatesCount} {playerMarkedDatesCount === 1 ? "día marcado" : "días marcados"}
+                        {playerMarkedDatesCount}{" "}
+                        {locale === "en"
+                          ? playerMarkedDatesCount === 1
+                            ? "day marked"
+                            : "days marked"
+                          : playerMarkedDatesCount === 1
+                          ? "día marcado"
+                          : "días marcados"}
                       </span>
                     </div>
                   </div>
 
                   <span className="text-[11px] px-2.5 py-0.5 rounded-full ios-btn-emerald text-white font-bold flex-shrink-0 shadow-sm">
-                    Votando
+                    {locale === "en" ? "Voting" : "Votando"}
                   </span>
                 </div>
 
                 <p className="text-[11px] text-zinc-400 flex items-center gap-1.5 pt-0.5">
                   <Check className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-                  <span>Toca cualquier día para marcar tu disponibilidad.</span>
+                  <span>
+                    {locale === "en"
+                      ? "Click any day to mark your availability."
+                      : "Toca cualquier día para marcar tu disponibilidad."}
+                  </span>
                 </p>
               </div>
             ) : (
@@ -477,21 +501,25 @@ export default function MonthScheduler({
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
                     <Eye className="w-3.5 h-3.5 text-zinc-400" />
-                    Modo Espectador
+                    {locale === "en" ? "Spectator Mode" : "Modo Espectador"}
                   </span>
                 </div>
 
                 <div className="liquid-glass-subtle rounded-2xl px-3.5 py-2.5 flex items-center justify-between gap-2.5 border border-white/10">
                   <div className="min-w-0 pr-1">
-                    <p className="text-xs font-bold text-zinc-200 truncate">Solo visualización</p>
-                    <p className="text-[10px] text-zinc-400 truncate">Consulta la disponibilidad general</p>
+                    <p className="text-xs font-bold text-zinc-200 truncate">
+                      {locale === "en" ? "View only" : "Solo visualización"}
+                    </p>
+                    <p className="text-[10px] text-zinc-400 truncate">
+                      {locale === "en" ? "Browse group availability" : "Consulta la disponibilidad general"}
+                    </p>
                   </div>
                   <button
                     type="button"
                     onClick={handleOpenClaimModal}
                     className="px-3.5 py-1.5 ios-btn-amber text-zinc-950 rounded-xl text-xs font-black transition-all shadow-sm flex-shrink-0 active:scale-95"
                   >
-                    Elegir personaje
+                    {locale === "en" ? "Claim character" : "Elegir personaje"}
                   </button>
                 </div>
               </div>
@@ -510,22 +538,32 @@ export default function MonthScheduler({
             <div>
               <h4 className="text-emerald-300 font-black text-sm sm:text-base flex items-center gap-2">
                 ¡{confirmedDates.length}{" "}
-                {confirmedDates.length === 1 ? "fecha confirmada" : "fechas confirmadas"} con Quórum
-                Total (100%)!
+                {confirmedDates.length === 1
+                  ? locale === "en"
+                    ? "date confirmed"
+                    : "fecha confirmada"
+                  : locale === "en"
+                  ? "dates confirmed"
+                  : "fechas confirmadas"}{" "}
+                {locale === "en" ? "with 100% Quorum!" : "con Quórum Total (100%)!"}
               </h4>
               <div className="text-xs sm:text-sm text-emerald-200/80 mt-1">
-                <span>Todos los {totalParticipants} miembros pueden jugar en: </span>
+                <span>
+                  {locale === "en"
+                    ? `All ${totalParticipants} members can play on: `
+                    : `Todos los ${totalParticipants} miembros pueden jugar en: `}
+                </span>
                 <span className="inline-flex flex-wrap items-center gap-1.5 mt-1 sm:mt-0">
                   {confirmedDates.map((d) => (
                     <a
                       key={d}
-                      href={generateGoogleCalendarUrl(poll.title, d)}
+                      href={generateGoogleCalendarUrl(poll.title, d, undefined, locale)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      title="Clic para agendar esta fecha en Google Calendar"
+                      title={locale === "en" ? "Click to add to Google Calendar" : "Clic para agendar esta fecha en Google Calendar"}
                       className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-100 font-bold text-xs transition-all hover:scale-105 active:scale-95"
                     >
-                      <span>{formatFriendlyDate(d)}</span>
+                      <span>{formatFriendlyDate(d, locale)}</span>
                       <CalendarPlus className="w-3 h-3 text-emerald-300" />
                     </a>
                   ))}
@@ -539,15 +577,15 @@ export default function MonthScheduler({
               className="flex-1 sm:flex-initial px-3.5 py-2 ios-btn-emerald text-white rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95"
             >
               <Copy className="w-3.5 h-3.5" />
-              {copiedWhatsApp ? "¡Copiado!" : "Copiar para WhatsApp"}
+              {copiedWhatsApp ? t("home.copied") : t("scheduler.whatsAppBtn")}
             </button>
             <button
               onClick={handleDownloadIcs}
               className="flex-1 sm:flex-initial px-3.5 py-2 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-200 rounded-2xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all border border-white/15 active:scale-95"
-              title="Descargar archivo .ics"
+              title={locale === "en" ? "Download .ics file" : "Descargar archivo .ics"}
             >
               <Download className="w-3.5 h-3.5" />
-              Descargar .ics
+              {t("scheduler.downloadIcsBtn")}
             </button>
           </div>
         </div>
@@ -560,7 +598,7 @@ export default function MonthScheduler({
           <div className="flex items-center justify-between w-full sm:w-auto">
             <h2 className="text-lg sm:text-xl font-black text-zinc-100 flex items-center gap-2.5 tracking-tight">
               <CalendarIcon className="w-5 h-5 text-amber-400" />
-              <span>Calendario de Disponibilidad</span>
+              <span>{t("scheduler.calendarTitle")}</span>
             </h2>
 
             {/* Selector de Vista en Mobile (Segmented Control estilo iOS) */}
@@ -573,10 +611,10 @@ export default function MonthScheduler({
                     ? "ios-segmented-active"
                     : "text-zinc-400 hover:text-zinc-200"
                 }`}
-                title="Vista Lista / Agenda"
+                title={t("scheduler.viewAgenda")}
               >
                 <List className="w-3.5 h-3.5" />
-                <span>Agenda</span>
+                <span>{t("scheduler.viewAgenda")}</span>
               </button>
               <button
                 type="button"
@@ -586,10 +624,10 @@ export default function MonthScheduler({
                     ? "ios-segmented-active"
                     : "text-zinc-400 hover:text-zinc-200"
                 }`}
-                title="Vista Cuadrícula (Mes)"
+                title={t("scheduler.viewMonth")}
               >
                 <LayoutGrid className="w-3.5 h-3.5" />
-                <span>Mes</span>
+                <span>{t("scheduler.viewMonth")}</span>
               </button>
             </div>
           </div>
@@ -598,11 +636,11 @@ export default function MonthScheduler({
           <div className="hidden sm:flex items-center gap-4 text-xs">
             <div className="flex items-center gap-1.5 text-zinc-400">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)] inline-block" />
-              <span className="font-medium">100% Quórum</span>
+              <span className="font-medium">{t("scheduler.quorumLegend")}</span>
             </div>
             <div className="flex items-center gap-1.5 text-zinc-400">
               <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.6)] inline-block" />
-              <span className="font-medium">Tu voto</span>
+              <span className="font-medium">{t("scheduler.yourVoteLegend")}</span>
             </div>
 
             <div className="flex items-center gap-1 ios-segmented-control p-1 rounded-2xl ml-2">
@@ -616,7 +654,7 @@ export default function MonthScheduler({
                 }`}
               >
                 <LayoutGrid className="w-3.5 h-3.5" />
-                <span>Mes</span>
+                <span>{t("scheduler.viewMonth")}</span>
               </button>
               <button
                 type="button"
@@ -628,7 +666,7 @@ export default function MonthScheduler({
                 }`}
               >
                 <List className="w-3.5 h-3.5" />
-                <span>Agenda</span>
+                <span>{t("scheduler.viewAgenda")}</span>
               </button>
             </div>
           </div>
@@ -646,7 +684,7 @@ export default function MonthScheduler({
                   : "liquid-glass-subtle text-zinc-400 hover:text-zinc-200 border border-white/[0.06]"
               }`}
             >
-              Próximas fechas ({upcomingMonthDays.length})
+              {t("scheduler.filterUpcoming", { count: upcomingMonthDays.length })}
             </button>
             <button
               type="button"
@@ -658,7 +696,7 @@ export default function MonthScheduler({
               }`}
             >
               <Dices className="w-3.5 h-3.5" />
-              <span>Fines de Semana (Vie-Dom)</span>
+              <span>{t("scheduler.filterWeekends")}</span>
             </button>
             <button
               type="button"
@@ -670,7 +708,7 @@ export default function MonthScheduler({
               }`}
             >
               <Users className="w-3.5 h-3.5" />
-              <span>Con respuestas</span>
+              <span>{t("scheduler.filterWithVotes")}</span>
             </button>
           </div>
         )}
@@ -722,7 +760,7 @@ export default function MonthScheduler({
                           }`}
                         >
                           <span className="text-[10px] uppercase font-black tracking-wider leading-tight">
-                            {WEEKDAY_NAMES_SHORT[dayOfWeek]}
+                            {WEEKDAY_NAMES_SHORT[locale][dayOfWeek]}
                           </span>
                           <span className="text-lg sm:text-xl font-black leading-none mt-0.5">
                             {cellDay.dayNumber}
@@ -733,19 +771,19 @@ export default function MonthScheduler({
                         <div className="min-w-0 space-y-1.5 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="text-xs sm:text-sm font-black text-zinc-100 tracking-tight">
-                              {formatFriendlyDate(dateKey)}
+                              {formatFriendlyDate(dateKey, locale)}
                             </span>
 
                             {isToday && (
                               <span className="text-[10px] px-2.5 py-0.5 rounded-full liquid-glass-subtle text-amber-300 border-amber-400/40 font-bold shadow-sm">
-                                Hoy
+                                {t("scheduler.todayBadge")}
                               </span>
                             )}
 
                             {isQuorumReached ? (
                               <span className="inline-flex items-center gap-1 text-[11px] px-3 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 font-bold animate-pulse shadow-sm">
                                 <Sparkles className="w-3 h-3" />
-                                ★ ¡100% Quórum! ({voterCount}/{totalParticipants})
+                                {t("scheduler.quorumReachedBadge", { voters: voterCount, total: totalParticipants })}
                               </span>
                             ) : (
                               <span
@@ -755,7 +793,7 @@ export default function MonthScheduler({
                                     : "bg-black/20 text-zinc-500 border-white/[0.04]"
                                 }`}
                               >
-                                {voterCount}/{totalParticipants} confirmados
+                                {t("scheduler.votersConfirmed", { voters: voterCount, total: totalParticipants })}
                               </span>
                             )}
                           </div>
@@ -778,7 +816,7 @@ export default function MonthScheduler({
                           {voterCount > 0 ? (
                             <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                               <span className="text-[10px] sm:text-[11px] text-zinc-400 font-medium">
-                                Disponibles:
+                                {t("scheduler.availablePlayers")}
                               </span>
                               {voters.map((name) => (
                                 <span
@@ -794,13 +832,15 @@ export default function MonthScheduler({
                               ))}
                               {totalParticipants - voterCount > 0 && (
                                 <span className="text-[10px] sm:text-[11px] text-zinc-500 ml-1">
-                                  (Faltan {totalParticipants - voterCount})
+                                  ({locale === "en" ? "Missing" : "Faltan"} {totalParticipants - voterCount})
                                 </span>
                               )}
                             </div>
                           ) : (
                             <p className="text-[10px] sm:text-[11px] text-zinc-500 italic">
-                              Nadie ha marcado disponibilidad aún.
+                              {locale === "en"
+                                ? "No one marked available yet."
+                                : "Nadie ha marcado disponibilidad aún."}
                             </p>
                           )}
                         </div>
@@ -821,12 +861,12 @@ export default function MonthScheduler({
                             {isSelectedPlayerVoted ? (
                               <>
                                 <Check className="w-4 h-4 stroke-[3]" />
-                                <span>Disponible</span>
+                                <span>{locale === "en" ? "Available" : "Disponible"}</span>
                               </>
                             ) : (
                               <>
                                 <Plus className="w-4 h-4" />
-                                <span>Marcar disponible</span>
+                                <span>{locale === "en" ? "Mark available" : "Marcar disponible"}</span>
                               </>
                             )}
                           </button>
@@ -837,7 +877,7 @@ export default function MonthScheduler({
                             className="w-full sm:w-auto min-h-[44px] px-5 py-2 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-200 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border border-white/15 active:scale-95"
                           >
                             <Eye className="w-3.5 h-3.5" />
-                            <span>Ver detalle</span>
+                            <span>{t("scheduler.seeDetail")}</span>
                           </button>
                         )}
                       </div>
@@ -849,9 +889,9 @@ export default function MonthScheduler({
 
             {filteredListDays.length > 5 && (
               <p className="text-[11px] text-zinc-400 text-center pt-3 flex items-center justify-center gap-1.5">
-                <span>Mostrando 5 de {filteredListDays.length} fechas próximas</span>
+                <span>{t("scheduler.showingDates", { total: filteredListDays.length })}</span>
                 <span>•</span>
-                <span>Desliza para ver más</span>
+                <span>{t("scheduler.scrollForMore")}</span>
               </p>
             )}
           </div>
@@ -862,7 +902,7 @@ export default function MonthScheduler({
           <>
             {/* Encabezado Días de la semana */}
             <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-2">
-              {WEEKDAYS_ES.map((day, idx) => (
+              {WEEKDAYS[locale].map((day, idx) => (
                 <div
                   key={day}
                   className={`text-center py-2 text-xs font-bold uppercase tracking-wider ${
@@ -920,12 +960,12 @@ export default function MonthScheduler({
                     onMouseLeave={() => setHoveredDay(null)}
                     title={
                       isPastDate
-                        ? "Esta fecha ya pasó (no disponible para coordinar)"
+                        ? t("scheduler.pastDateTitle")
                         : !selectedPlayer
                         ? undefined
                         : isSelectedPlayerVoted
-                        ? "Clic para desmarcar tu disponibilidad"
-                        : "Clic para marcar tu disponibilidad"
+                        ? t("scheduler.clickToUnmark")
+                        : t("scheduler.clickToMark")
                     }
                     className={`group relative min-h-[72px] sm:min-h-[115px] p-2 sm:p-2.5 rounded-2xl border transition-all duration-200 flex flex-col justify-between select-none ${
                       hoveredDay?.dateString === dateKey ? "z-40" : "z-10"
@@ -961,14 +1001,14 @@ export default function MonthScheduler({
 
                       {/* Indicador de si el día es pasado o si el jugador votó */}
                       {isPastDate ? (
-                        <span className="text-[9px] sm:text-[10px] text-zinc-600 font-medium">Pasado</span>
+                        <span className="text-[9px] sm:text-[10px] text-zinc-600 font-medium">{t("scheduler.pastDate")}</span>
                       ) : (
                         selectedPlayer && (
                           <span
                             title={
                               isSelectedPlayerVoted
-                                ? "Marcaste disponible este día (clic para quitar)"
-                                : "No has marcado este día (clic para marcar)"
+                                ? t("scheduler.clickToUnmark")
+                                : t("scheduler.clickToMark")
                             }
                             className={`w-4 h-4 rounded-lg flex items-center justify-center transition-all ${
                               isSelectedPlayerVoted
@@ -990,7 +1030,7 @@ export default function MonthScheduler({
                           e.stopPropagation();
                           setActiveDayModal(cellDay);
                         }}
-                        title="Clic para ver quiénes votaron este día"
+                        title={locale === "en" ? "Click to see who voted on this day" : "Clic para ver quiénes votaron este día"}
                         className="cursor-pointer transition-transform hover:scale-105 active:scale-95 focus:outline-none"
                       >
                         {isQuorumReached ? (
@@ -1037,7 +1077,7 @@ export default function MonthScheduler({
                             {voters.length > 2 && ` +${voters.length - 2}`}
                           </span>
                         ) : (
-                          <span className="text-zinc-600 italic">Sin votos</span>
+                          <span className="text-zinc-600 italic">{t("scheduler.noVotes")}</span>
                         )}
                       </div>
                     </div>
@@ -1054,7 +1094,7 @@ export default function MonthScheduler({
 
                         <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-white/10">
                           <span className="text-xs font-black text-white tracking-wide">
-                            {formatFriendlyDate(dateKey)}
+                            {formatFriendlyDate(dateKey, locale)}
                           </span>
                           <span
                             className={`text-[11px] font-black px-2.5 py-0.5 rounded-full ${
@@ -1072,10 +1112,10 @@ export default function MonthScheduler({
                         <div className="space-y-2.5 text-xs">
                           <div>
                             <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider mb-1.5 flex items-center justify-between">
-                              <span>Confirmados ({voterCount})</span>
+                              <span>{t("scheduler.confirmed", { count: voterCount })}</span>
                               {isQuorumReached && (
                                 <span className="text-emerald-400 font-bold flex items-center gap-1">
-                                  ★ Quórum 100%
+                                  {locale === "en" ? "★ 100% Quorum" : "★ Quórum 100%"}
                                 </span>
                               )}
                             </div>
@@ -1095,14 +1135,14 @@ export default function MonthScheduler({
                                 ))}
                               </div>
                             ) : (
-                              <p className="text-zinc-500 italic text-[11px]">Nadie ha confirmado aún.</p>
+                              <p className="text-zinc-500 italic text-[11px]">{t("scheduler.noOneConfirmed")}</p>
                             )}
                           </div>
 
                           {totalParticipants - voterCount > 0 && (
                             <div className="pt-1 border-t border-white/[0.06]">
                               <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1.5">
-                                Faltan ({totalParticipants - voterCount}):
+                                {t("scheduler.missing", { count: totalParticipants - voterCount })}
                               </div>
                               <div className="flex flex-wrap gap-1.5">
                                 {poll.participants
@@ -1134,10 +1174,10 @@ export default function MonthScheduler({
         <div>
           <h3 className="text-base font-black text-zinc-100 flex items-center gap-2.5 tracking-tight">
             <Share2 className="w-4 h-4 text-amber-400" />
-            Exportar y Notificar al Grupo
+            {t("scheduler.exportTitle")}
           </h3>
           <p className="text-xs text-zinc-400 mt-0.5">
-            Comparte los resultados por WhatsApp o agenda las sesiones en tu calendario.
+            {t("scheduler.exportDesc")}
           </p>
         </div>
 
@@ -1148,7 +1188,7 @@ export default function MonthScheduler({
             className="flex-1 sm:flex-initial px-4 py-2.5 ios-btn-emerald text-white rounded-2xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-md active:scale-95"
           >
             <Copy className="w-4 h-4" />
-            {copiedWhatsApp ? "¡Resumen Copiado!" : "Copiar para WhatsApp"}
+            {copiedWhatsApp ? t("scheduler.whatsAppCopied") : t("scheduler.whatsAppBtn")}
           </button>
 
           {/* Botón Google Calendar: directo para 1 fecha o dropdown inteligente para múltiples fechas */}
@@ -1156,21 +1196,21 @@ export default function MonthScheduler({
             <button
               disabled
               className="flex-1 sm:flex-initial px-4 py-2.5 bg-black/20 text-zinc-500 rounded-2xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 cursor-not-allowed border border-white/[0.04]"
-              title="Disponible cuando haya al menos 1 fecha con quórum 100%"
+              title={t("scheduler.googleCalDisabledTitle")}
             >
               <CalendarPlus className="w-4 h-4" />
-              Google Calendar
+              {t("scheduler.googleCalBtn")}
             </button>
           ) : confirmedDates.length === 1 ? (
             <a
-              href={generateGoogleCalendarUrl(poll.title, confirmedDates[0])}
+              href={generateGoogleCalendarUrl(poll.title, confirmedDates[0], undefined, locale)}
               target="_blank"
               rel="noopener noreferrer"
               className="flex-1 sm:flex-initial px-4 py-2.5 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-100 rounded-2xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all border border-white/15 active:scale-95 shadow-sm"
-              title={`Agendar ${formatFriendlyDate(confirmedDates[0])}`}
+              title={t("scheduler.scheduleDate", { date: formatFriendlyDate(confirmedDates[0], locale) })}
             >
               <CalendarPlus className="w-4 h-4 text-blue-400" />
-              <span>Google Calendar</span>
+              <span>{t("scheduler.googleCalBtn")}</span>
               <ExternalLink className="w-3 h-3 text-zinc-400" />
             </a>
           ) : (
@@ -1181,7 +1221,7 @@ export default function MonthScheduler({
                 className="w-full px-4 py-2.5 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-100 rounded-2xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all border border-white/15 active:scale-95 shadow-sm"
               >
                 <CalendarPlus className="w-4 h-4 text-blue-400" />
-                <span>Google Calendar ({confirmedDates.length})</span>
+                <span>{t("scheduler.googleCalCount", { count: confirmedDates.length })}</span>
                 <ChevronDown
                   className={`w-3.5 h-3.5 text-zinc-400 transition-transform duration-200 ${
                     showGoogleDropdown ? "rotate-180" : ""
@@ -1192,9 +1232,9 @@ export default function MonthScheduler({
               {showGoogleDropdown && (
                 <div className="absolute bottom-full mb-2 right-0 sm:right-auto sm:left-0 z-40 w-72 sm:w-80 liquid-glass-elevated rounded-3xl shadow-2xl p-3.5 space-y-2 border border-white/20">
                   <div className="flex items-center justify-between pb-2 border-b border-white/10 text-xs">
-                    <span className="font-bold text-zinc-200">Agendar en Google Calendar:</span>
+                    <span className="font-bold text-zinc-200">{t("scheduler.scheduleGoogleCalendar")}</span>
                     <span className="px-2.5 py-0.5 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-300 font-black text-[10px]">
-                      {confirmedDates.length} fechas
+                      {t("scheduler.datesCount", { count: confirmedDates.length })}
                     </span>
                   </div>
 
@@ -1202,17 +1242,17 @@ export default function MonthScheduler({
                     {confirmedDates.map((date) => (
                       <a
                         key={date}
-                        href={generateGoogleCalendarUrl(poll.title, date)}
+                        href={generateGoogleCalendarUrl(poll.title, date, undefined, locale)}
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={() => setShowGoogleDropdown(false)}
                         className="flex items-center justify-between p-2.5 rounded-2xl liquid-glass-subtle hover:bg-white/[0.12] border border-white/10 hover:border-blue-400/50 transition-all text-xs text-zinc-200 group active:scale-95"
                       >
                         <span className="font-bold text-zinc-200 group-hover:text-white">
-                          {formatFriendlyDate(date)}
+                          {formatFriendlyDate(date, locale)}
                         </span>
                         <span className="flex items-center gap-1 text-[11px] text-blue-400 font-bold">
-                          Abrir <ExternalLink className="w-3 h-3" />
+                          {t("scheduler.openExternal")} <ExternalLink className="w-3 h-3" />
                         </span>
                       </a>
                     ))}
@@ -1223,17 +1263,19 @@ export default function MonthScheduler({
                       type="button"
                       onClick={() => {
                         confirmedDates.forEach((date) => {
-                          window.open(generateGoogleCalendarUrl(poll.title, date), "_blank");
+                          window.open(generateGoogleCalendarUrl(poll.title, date, undefined, locale), "_blank");
                         });
                         setShowGoogleDropdown(false);
                       }}
                       className="w-full py-2 px-3.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-400/30 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95"
                     >
                       <CalendarPlus className="w-3.5 h-3.5" />
-                      Abrir todas las fechas en pestañas
+                      {t("scheduler.openAllTabs")}
                     </button>
                     <p className="text-[10px] text-zinc-400 text-center leading-tight">
-                      💡 Usa <strong className="text-zinc-200">&quot;Descargar .ics&quot;</strong> si prefieres importar todas juntas en 1 archivo.
+                      {t("scheduler.icsTipBefore")}
+                      <strong className="text-zinc-200">{t("scheduler.icsTipStrong")}</strong>
+                      {t("scheduler.icsTipAfter")}
                     </p>
                   </div>
                 </div>
@@ -1252,7 +1294,7 @@ export default function MonthScheduler({
             }`}
           >
             <Download className="w-4 h-4" />
-            Descargar .ics
+            {t("scheduler.downloadIcsBtn")}
           </button>
         </div>
       </div>
@@ -1277,17 +1319,17 @@ export default function MonthScheduler({
             <button
               onClick={() => setActiveDayModal(null)}
               className="absolute top-5 right-5 p-2 text-zinc-400 hover:text-white rounded-2xl hover:bg-white/10 transition-colors"
-              title="Cerrar"
+              title={t("common.close")}
             >
               <X className="w-5 h-5" />
             </button>
 
             <div>
               <div className="text-[11px] font-bold text-amber-300 uppercase tracking-wider">
-                Detalle de Disponibilidad
+                {t("scheduler.dayDetailHeader")}
               </div>
               <h3 className="text-xl font-black text-zinc-100 tracking-tight mt-1">
-                {formatFriendlyDate(activeDayModal.dateString)}
+                {formatFriendlyDate(activeDayModal.dateString, locale)}
               </h3>
             </div>
 
@@ -1301,7 +1343,7 @@ export default function MonthScheduler({
               return (
                 <div className="space-y-4 text-xs">
                   <div className="flex items-center justify-between p-3.5 rounded-2xl liquid-glass-subtle border border-white/10">
-                    <span className="font-semibold text-zinc-300">Quórum de la mesa:</span>
+                    <span className="font-semibold text-zinc-300">{t("scheduler.tableQuorum")}</span>
                     <span
                       className={`font-black px-3 py-1 rounded-full ${
                         isQuorum
@@ -1309,13 +1351,17 @@ export default function MonthScheduler({
                           : "liquid-glass-subtle text-zinc-400 border border-white/10"
                       }`}
                     >
-                      {voterCount} de {totalParticipants} confirmados ({Math.round((voterCount / (totalParticipants || 1)) * 100)}%)
+                      {t("scheduler.quorumStatus", {
+                        voters: voterCount,
+                        total: totalParticipants,
+                        percent: Math.round((voterCount / (totalParticipants || 1)) * 100),
+                      })}
                     </span>
                   </div>
 
                   <div className="space-y-2">
                     <span className="font-bold text-zinc-400 uppercase tracking-wider block text-[10px]">
-                      Disponibles ({voterCount}):
+                      {t("scheduler.availableVoters", { count: voterCount })}
                     </span>
                     {voterCount > 0 ? (
                       <div className="flex flex-wrap gap-1.5">
@@ -1329,14 +1375,14 @@ export default function MonthScheduler({
                         ))}
                       </div>
                     ) : (
-                      <p className="text-zinc-500 italic">Nadie ha marcado disponible aún.</p>
+                      <p className="text-zinc-500 italic">{t("scheduler.noOneConfirmed")}</p>
                     )}
                   </div>
 
                   {missingPlayers.length > 0 && (
                     <div className="space-y-2 pt-1">
                       <span className="font-bold text-zinc-500 uppercase tracking-wider block text-[10px]">
-                        Faltan por confirmar ({missingPlayers.length}):
+                        {t("scheduler.missingVoters", { count: missingPlayers.length })}
                       </span>
                       <div className="flex flex-wrap gap-1.5">
                         {missingPlayers.map((name) => (
@@ -1368,12 +1414,12 @@ export default function MonthScheduler({
                         {voters.includes(selectedPlayer) ? (
                           <>
                             <X className="w-4 h-4" />
-                            Quitar mi disponibilidad
+                            {t("scheduler.removeMyAvailability")}
                           </>
                         ) : (
                           <>
                             <Check className="w-4 h-4 stroke-[3]" />
-                            Marcarme como disponible
+                            {t("scheduler.markMeAvailable")}
                           </>
                         )}
                       </button>

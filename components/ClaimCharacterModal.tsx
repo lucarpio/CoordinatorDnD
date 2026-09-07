@@ -4,13 +4,12 @@ import React, { useEffect } from "react";
 import { AvailabilityMap } from "@/lib/supabase";
 import {
   Shield,
-  Dices,
   Check,
   Eye,
   X,
-  UserCheck,
   CalendarCheck,
 } from "lucide-react";
+import { useLanguage } from "@/context/LanguageContext";
 
 interface ClaimCharacterModalProps {
   isOpen: boolean;
@@ -35,6 +34,8 @@ export default function ClaimCharacterModal({
   onEnterAsSpectator,
   canDismiss = false,
 }: ClaimCharacterModalProps) {
+  const { t, locale } = useLanguage();
+
   const handleDismiss = () => {
     if (canDismiss) {
       onClose();
@@ -81,7 +82,7 @@ export default function ClaimCharacterModal({
         <button
           onClick={handleDismiss}
           className="absolute top-5 right-5 p-2 text-zinc-400 hover:text-white hover:bg-white/10 rounded-2xl transition-all"
-          title="Cerrar"
+          title={t("common.close")}
         >
           <X className="w-5 h-5" />
         </button>
@@ -90,14 +91,15 @@ export default function ClaimCharacterModal({
         <div className="space-y-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full liquid-glass-subtle text-amber-300 text-xs font-bold border border-white/10 shadow-sm">
             <Shield className="w-3.5 h-3.5 text-amber-400" />
-            Acceso a la Mesa
+            {locale === "en" ? "Table Access" : "Acceso a la Mesa"}
           </div>
           <h2 className="text-xl sm:text-2xl font-black text-zinc-100 tracking-tight">
-            ¿Quién eres en esta mesa?
+            {t("claimModal.title")}
           </h2>
           <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
-            Campaña: <strong className="text-zinc-200">{campaignTitle}</strong>. Selecciona tu
-            personaje para abrir tu calendario personal y marcar tu disponibilidad con 1 clic.
+            {locale === "en" ? "Campaign: " : "Campaña: "}
+            <strong className="text-zinc-200">{campaignTitle}</strong>.{" "}
+            {t("claimModal.subtitle")}
           </p>
         </div>
 
@@ -145,10 +147,15 @@ export default function ClaimCharacterModal({
                       <CalendarCheck className="w-3 h-3 text-zinc-400" />
                       {markedDays > 0 ? (
                         <span className="text-zinc-300 font-semibold">
-                          {markedDays} {markedDays === 1 ? "día marcado" : "días marcados"}
+                          {markedDays}{" "}
+                          {locale === "en"
+                            ? markedDays === 1 ? "day marked" : "days marked"
+                            : markedDays === 1 ? "día marcado" : "días marcados"}
                         </span>
                       ) : (
-                        <span className="text-zinc-500 italic">Sin responder aún</span>
+                        <span className="text-zinc-500 italic">
+                          {locale === "en" ? "No response yet" : "Sin responder aún"}
+                        </span>
                       )}
                     </p>
                   </div>
@@ -158,11 +165,11 @@ export default function ClaimCharacterModal({
                   {isCurrent ? (
                     <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl ios-btn-amber text-zinc-950 text-xs font-black shadow-sm">
                       <Check className="w-3.5 h-3.5 stroke-[3]" />
-                      Actual
+                      {locale === "en" ? "Current" : "Actual"}
                     </span>
                   ) : (
                     <span className="text-xs font-bold px-3 py-1 rounded-xl border border-white/10 text-zinc-400 group-hover:text-amber-300 group-hover:border-amber-400/30 group-hover:bg-amber-500/10 transition-all">
-                      Elegir
+                      {t("claimModal.selectBtn")}
                     </span>
                   )}
                 </div>
@@ -179,7 +186,11 @@ export default function ClaimCharacterModal({
             className="w-full sm:w-auto text-zinc-400 hover:text-amber-300 flex items-center justify-center gap-1.5 py-2 px-3 rounded-2xl hover:bg-white/[0.06] transition-colors active:scale-95"
           >
             <Eye className="w-4 h-4" />
-            <span>Solo ver calendario (Modo espectador / Master)</span>
+            <span>
+              {locale === "en"
+                ? "View calendar only (Spectator / DM mode)"
+                : "Solo ver calendario (Modo espectador / Master)"}
+            </span>
           </button>
 
           {canDismiss && (
@@ -188,7 +199,7 @@ export default function ClaimCharacterModal({
               onClick={onClose}
               className="w-full sm:w-auto px-4 py-2 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-200 font-bold rounded-2xl transition-colors border border-white/15 active:scale-95"
             >
-              Mantener actual
+              {locale === "en" ? "Keep current" : "Mantener actual"}
             </button>
           )}
         </div>

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase, Poll, AvailabilityMap } from "@/lib/supabase";
 import MonthScheduler from "@/components/MonthScheduler";
 import { AlertCircle, ArrowLeft, Loader2 } from "lucide-react";
+import { useLanguage } from "@/context/LanguageContext";
 
 interface PollRoomClientProps {
   slug: string;
@@ -12,6 +13,7 @@ interface PollRoomClientProps {
 
 export default function PollRoomClient({ slug }: PollRoomClientProps) {
   const router = useRouter();
+  const { t, locale } = useLanguage();
 
   const [poll, setPoll] = useState<Poll | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -32,17 +34,25 @@ export default function PollRoomClient({ slug }: PollRoomClientProps) {
         .single();
 
       if (fetchError || !data) {
-        throw new Error(fetchError?.message || "No se encontró la sala de coordinación.");
+        throw new Error(
+          fetchError?.message ||
+            (locale === "en"
+              ? "Coordination room not found."
+              : "No se encontró la sala de coordinación.")
+        );
       }
 
       setPoll(data as Poll);
     } catch (err: any) {
       console.error("Error fetching poll:", err);
-      setError(err.message || "Error al cargar la sala.");
+      setError(
+        err.message ||
+          (locale === "en" ? "Error loading room." : "Error al cargar la sala.")
+      );
     } finally {
       setIsLoading(false);
     }
-  }, [slug]);
+  }, [slug, locale]);
 
   useEffect(() => {
     fetchPoll();
@@ -104,7 +114,9 @@ export default function PollRoomClient({ slug }: PollRoomClientProps) {
         <div className="w-16 h-16 rounded-3xl liquid-glass flex items-center justify-center border border-white/15 shadow-xl">
           <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
         </div>
-        <p className="text-zinc-400 text-sm font-semibold tracking-tight">Cargando tablero de la mesa...</p>
+        <p className="text-zinc-400 text-sm font-semibold tracking-tight">
+          {locale === "en" ? "Loading table board..." : "Cargando tablero de la mesa..."}
+        </p>
       </div>
     );
   }
@@ -115,16 +127,21 @@ export default function PollRoomClient({ slug }: PollRoomClientProps) {
         <div className="w-14 h-14 rounded-2xl bg-red-500/20 text-red-400 flex items-center justify-center mx-auto border border-red-500/30">
           <AlertCircle className="w-7 h-7" />
         </div>
-        <h2 className="text-xl font-black text-zinc-100 tracking-tight">Sala no encontrada</h2>
+        <h2 className="text-xl font-black text-zinc-100 tracking-tight">
+          {locale === "en" ? "Room not found" : "Sala no encontrada"}
+        </h2>
         <p className="text-xs text-zinc-400 leading-relaxed">
-          {error || "El enlace ingresado no corresponde a ninguna encuesta activa."}
+          {error ||
+            (locale === "en"
+              ? "The link does not match any active coordination table."
+              : "El enlace ingresado no corresponde a ninguna encuesta activa.")}
         </p>
         <button
           onClick={() => router.push("/")}
           className="inline-flex items-center gap-2 px-5 py-2.5 ios-btn-amber text-zinc-950 rounded-2xl text-xs font-black transition-all active:scale-95 shadow-md"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
-          Volver al Inicio
+          {t("common.back")}
         </button>
       </div>
     );
@@ -138,7 +155,7 @@ export default function PollRoomClient({ slug }: PollRoomClientProps) {
           className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-2xl text-xs font-semibold text-zinc-300 hover:text-white liquid-glass-subtle border border-white/10 transition-all active:scale-95"
         >
           <ArrowLeft className="w-3.5 h-3.5 text-amber-400" />
-          Crear otra sala
+          {t("nav.newPoll")}
         </button>
       </div>
 
