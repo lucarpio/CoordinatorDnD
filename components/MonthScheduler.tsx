@@ -378,14 +378,14 @@ export default function MonthScheduler({
 
   const totalParticipants = poll.participants.length;
 
-  // Lista de fechas que alcanzaron quórum estricto (100%)
+  // Lista de fechas próximas que alcanzaron quórum estricto (100%)
   const confirmedDates = useMemo(() => {
     if (totalParticipants === 0) return [];
     return Object.entries(poll.availability)
-      .filter(([_, voters]) => voters && voters.length >= totalParticipants)
+      .filter(([date, voters]) => date >= todayDateStr && voters && voters.length >= totalParticipants)
       .map(([date]) => date)
       .sort();
-  }, [poll.availability, totalParticipants]);
+  }, [poll.availability, todayDateStr, totalParticipants]);
 
   // Función para ejecutar el guardado debounced a Supabase
   const flushPendingSave = useCallback(async () => {
@@ -1053,7 +1053,7 @@ export default function MonthScheduler({
                 No hay fechas próximas pendientes en este mes que coincidan con el filtro.
               </div>
             ) : (
-              <div className="space-y-2.5 max-h-[460px] sm:max-h-[490px] overflow-y-auto pr-1.5 sm:pr-2 overscroll-contain scroll-smooth">
+              <div className="space-y-2.5 max-h-[460px] sm:max-h-[490px] overflow-y-auto pr-1.5 sm:pr-2 overscroll-auto scroll-smooth">
                 {filteredListDays.map((cellDay) => {
                   const dateKey = cellDay.dateString;
                   const voters = poll.availability[dateKey] || [];
