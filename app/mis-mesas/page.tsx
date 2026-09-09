@@ -32,6 +32,16 @@ export default function MisMesasPage() {
   const [livePolls, setLivePolls] = useState<Record<string, Poll>>({});
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
+  const copyTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  // Limpiar timer al desmontar
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) {
+        clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
 
   // Estado para vincular mesa existente
   const [importInput, setImportInput] = useState<string>("");
@@ -114,7 +124,12 @@ export default function MisMesasPage() {
 
     navigator.clipboard.writeText(text);
     setCopiedSlug(slug);
-    setTimeout(() => setCopiedSlug(null), 2500);
+    if (copyTimerRef.current) {
+      clearTimeout(copyTimerRef.current);
+    }
+    copyTimerRef.current = setTimeout(() => {
+      setCopiedSlug(null);
+    }, 2500);
   };
 
   // Vincular mesa existente ingresando slug o URL

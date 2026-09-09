@@ -36,13 +36,13 @@ export default function ClaimCharacterModal({
 }: ClaimCharacterModalProps) {
   const { t, locale } = useLanguage();
 
-  const handleDismiss = () => {
+  const handleDismiss = React.useCallback(() => {
     if (canDismiss) {
       onClose();
     } else {
       onEnterAsSpectator();
     }
-  };
+  }, [canDismiss, onClose, onEnterAsSpectator]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -55,7 +55,7 @@ export default function ClaimCharacterModal({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isOpen, canDismiss, onClose, onEnterAsSpectator]);
+  }, [isOpen, handleDismiss]);
 
   if (!isOpen) return null;
 

@@ -120,6 +120,7 @@ export default function MonthScheduler({
   // Referencias para evitar condiciones de carrera en clics rápidos y sincronización
   const availabilityRef = useRef<AvailabilityMap>(initialPoll.availability);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isSavingRef = useRef<boolean>(false);
   const pendingSaveRef = useRef<AvailabilityMap | null>(null);
   const selectedPlayerRef = useRef<string>(selectedPlayer);
@@ -133,18 +134,13 @@ export default function MonthScheduler({
     // Si tenemos clics pendientes de guardar o se están guardando localmente,
     // fusionamos para preservar la selección activa del jugador actual sin que se borren
     if (debounceTimerRef.current !== null || isSavingRef.current || pendingSaveRef.current !== null) {
-      const currentPlayer = selectedPlayerRef.current;
-      if (currentPlayer) {
+      if (selectedPlayer && initialPoll.availability) {
         const merged: AvailabilityMap = { ...initialPoll.availability };
-        const allDates = new Set([
-          ...Object.keys(availabilityRef.current),
-          ...Object.keys(merged),
-        ]);
+        const currentPlayer = selectedPlayer;
 
-        allDates.forEach((date) => {
-          const localVoters = availabilityRef.current[date] || [];
+        Object.keys(availabilityRef.current).forEach((date) => {
+          const localHasPlayer = availabilityRef.current[date]?.includes(currentPlayer);
           const remoteVoters = merged[date] || [];
-          const localHasPlayer = localVoters.includes(currentPlayer);
           const remoteHasPlayer = remoteVoters.includes(currentPlayer);
 
           if (localHasPlayer && !remoteHasPlayer) {
@@ -164,11 +160,14 @@ export default function MonthScheduler({
     setPoll(initialPoll);
   }, [initialPoll]);
 
-  // Limpiar timer de debounce al desmontar
+  // Limpiar timers al desmontar
   useEffect(() => {
     return () => {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
+      }
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
       }
     };
   }, []);
@@ -176,7 +175,16 @@ export default function MonthScheduler({
   // Recordar al jugador en localStorage o invitar a reclamar personaje
   useEffect(() => {
     const storageKey = `dnd_player_${poll.slug}`;
-    const savedPlayer = localStorage.getItem(storageKey);
+    let savedPlayer: string | null = null;
+    let isSpectatorSession: string | null = null;
+
+    try {
+      savedPlayer = localStorage.getItem(storageKey);
+      isSpectatorSession = sessionStorage.getItem(`dnd_spectator_${poll.slug}`);
+    } catch {
+      // Ignorar restricciones de storage en navegadores seguros
+    }
+
     if (savedPlayer && poll.participants.includes(savedPlayer)) {
       setSelectedPlayer(savedPlayer);
       if (!isStepCompleted("room_vote")) {
@@ -184,7 +192,6 @@ export default function MonthScheduler({
         return () => clearTimeout(timer);
       }
     } else {
-      const isSpectatorSession = sessionStorage.getItem(`dnd_spectator_${poll.slug}`);
       if (isSpectatorSession) {
         setIsSpectator(true);
       } else {
@@ -199,8 +206,13 @@ export default function MonthScheduler({
     setSelectedPlayer(player);
     setIsSpectator(false);
     setShowClaimModal(false);
-    localStorage.setItem(`dnd_player_${poll.slug}`, player);
-    sessionStorage.removeItem(`dnd_spectator_${poll.slug}`);
+
+    try {
+      localStorage.setItem(`dnd_player_${poll.slug}`, player);
+      sessionStorage.removeItem(`dnd_spectator_${poll.slug}`);
+    } catch {
+      // Ignorar restricciones de storage
+    }
 
     // Guardar / actualizar en "Mis Mesas" para que el jugador nunca pierda el acceso
     saveCreatedPoll({
@@ -403,7 +415,12 @@ export default function MonthScheduler({
 
     navigator.clipboard.writeText(summary);
     setCopiedWhatsApp(true);
-    setTimeout(() => setCopiedWhatsApp(false), 3000);
+    if (copyTimeoutRef.current) {
+      clearTimeout(copyTimeoutRef.current);
+    }
+    copyTimeoutRef.current = setTimeout(() => {
+      setCopiedWhatsApp(false);
+    }, 3000);
   };
 
   const handleDownloadIcs = () => {

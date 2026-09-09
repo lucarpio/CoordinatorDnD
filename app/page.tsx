@@ -48,6 +48,16 @@ export default function Home() {
     title: string;
   } | null>(null);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
+  const copyTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  // Limpiar timer al desmontar
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) {
+        clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
 
   // Cargar mesas creadas guardadas localmente
   useEffect(() => {
@@ -202,7 +212,12 @@ export default function Home() {
 
     navigator.clipboard.writeText(text);
     setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 3000);
+    if (copyTimerRef.current) {
+      clearTimeout(copyTimerRef.current);
+    }
+    copyTimerRef.current = setTimeout(() => {
+      setCopiedLink(false);
+    }, 3000);
   };
 
   return (
