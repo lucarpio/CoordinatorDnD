@@ -104,6 +104,8 @@ export default function TutorialHelpModal() {
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xl animate-in fade-in duration-200 cursor-pointer"
       role="dialog"
       aria-modal="true"
+      aria-labelledby="tutorial-help-title"
+      data-testid="tutorial-help-modal"
     >
       <div
         onClick={(e) => e.stopPropagation()}
@@ -117,6 +119,8 @@ export default function TutorialHelpModal() {
           onClick={() => setShowHelpModal(false)}
           className="absolute top-5 right-5 p-2 text-zinc-400 hover:text-white rounded-2xl hover:bg-white/10 transition-colors"
           title={t("common.close")}
+          aria-label={t("common.close")}
+          data-testid="tutorial-help-close-btn"
         >
           <X className="w-5 h-5" />
         </button>
@@ -127,7 +131,7 @@ export default function TutorialHelpModal() {
             <HelpCircle className="w-4 h-4" />
             <span>CoordinatorDnD</span>
           </div>
-          <h3 className="text-xl sm:text-2xl font-black text-zinc-100 tracking-tight mt-1">
+          <h3 id="tutorial-help-title" className="text-xl sm:text-2xl font-black text-zinc-100 tracking-tight mt-1">
             {t("tutorial.helpTitle")}
           </h3>
           <p className="text-xs text-zinc-400 mt-1">
@@ -166,6 +170,8 @@ export default function TutorialHelpModal() {
             type="button"
             onClick={handleReset}
             disabled={resetSuccess}
+            data-testid="tutorial-reset-btn"
+            aria-label={resetSuccess ? t("tutorial.resetSuccess") : t("tutorial.resetTutorialBtn")}
             className={`w-full py-2.5 px-4 rounded-2xl text-xs font-black flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md ${
               resetSuccess
                 ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/40"

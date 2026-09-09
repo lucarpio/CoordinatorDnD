@@ -2,6 +2,15 @@ import { createClient } from "@supabase/supabase-js";
 
 export type AvailabilityMap = Record<string, string[]>;
 
+export interface DateComment {
+  id: string;
+  author: string;
+  text: string;
+  createdAt: string;
+}
+
+export type DateCommentsMap = Record<string, DateComment[]>;
+
 export interface Poll {
   id: string;
   slug: string;
@@ -10,6 +19,7 @@ export interface Poll {
   month: number; // 1 - 12
   participants: string[];
   availability: AvailabilityMap;
+  comments?: DateCommentsMap;
   created_at: string;
   updated_at: string;
 }
@@ -34,6 +44,7 @@ export interface Database {
           month: number;
           participants: string[];
           availability: AvailabilityMap;
+          comments?: DateCommentsMap;
           created_at: string;
           updated_at: string;
         };
@@ -45,6 +56,7 @@ export interface Database {
           month: number;
           participants: string[];
           availability?: AvailabilityMap;
+          comments?: DateCommentsMap;
           created_at?: string;
           updated_at?: string;
         };
@@ -56,6 +68,7 @@ export interface Database {
           month?: number;
           participants?: string[];
           availability?: AvailabilityMap;
+          comments?: DateCommentsMap;
           created_at?: string;
           updated_at?: string;
         };

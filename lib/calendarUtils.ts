@@ -1,3 +1,5 @@
+import type { DateCommentsMap } from "./supabase";
+
 export type SupportedLocale = "es" | "en";
 
 export const MONTH_NAMES_ES = [
@@ -228,7 +230,8 @@ export function generateWhatsAppSummary(
   participants: string[],
   confirmedDates: string[],
   roomUrl?: string,
-  locale: SupportedLocale = "es"
+  locale: SupportedLocale = "es",
+  comments?: DateCommentsMap
 ): string {
   const monthName = MONTH_NAMES[locale][month - 1];
   const total = participants.length;
@@ -243,6 +246,12 @@ export function generateWhatsAppSummary(
       text += `✨ *CONFIRMED DATES (100% Quorum)!* ✨\n`;
       confirmedDates.forEach((dateStr) => {
         text += `  ⭐ *${formatFriendlyDate(dateStr, "en")}* (8:30 PM)\n`;
+        const dateNotes = comments?.[dateStr];
+        if (dateNotes && dateNotes.length > 0) {
+          dateNotes.forEach((note) => {
+            text += `     💬 _${note.author}: "${note.text}"_\n`;
+          });
+        }
       });
       text += `\n🛡️ _Prepare your spells, take a long rest and have your character sheets ready!_\n`;
     } else {
@@ -266,6 +275,12 @@ export function generateWhatsAppSummary(
     text += `✨ *¡FECHAS CONFIRMADAS (100% Quórum)!* ✨\n`;
     confirmedDates.forEach((dateStr) => {
       text += `  ⭐ *${formatFriendlyDate(dateStr, "es")}* (8:30 PM)\n`;
+      const dateNotes = comments?.[dateStr];
+      if (dateNotes && dateNotes.length > 0) {
+        dateNotes.forEach((note) => {
+          text += `     💬 _${note.author}: "${note.text}"_\n`;
+        });
+      }
     });
     text += `\n🛡️ _¡Alineen sus hechizos, descansen largo y tengan listas las hojas de personaje!_\n`;
   } else {

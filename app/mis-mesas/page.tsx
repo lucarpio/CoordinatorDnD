@@ -353,6 +353,8 @@ export default function MisMesasPage() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => handleCopyWhatsApp(saved.slug, title)}
+                      data-testid={`whatsapp-table-btn-${saved.slug}`}
+                      aria-label={copiedSlug === saved.slug ? t("home.copied") : `${t("scheduler.whatsAppBtn")} - ${title}`}
                       className="px-3.5 py-2.5 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-200 rounded-2xl text-xs font-semibold flex items-center gap-1.5 transition-all border border-white/10 active:scale-95"
                     >
                       {copiedSlug === saved.slug ? (
@@ -370,6 +372,8 @@ export default function MisMesasPage() {
 
                     <button
                       onClick={() => handleRemove(saved.slug, title)}
+                      data-testid={`remove-table-btn-${saved.slug}`}
+                      aria-label={`${t("misMesas.confirmDelete")} ${title}`}
                       className="p-2.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-2xl transition-all"
                       title={t("misMesas.confirmDelete")}
                     >
@@ -379,6 +383,8 @@ export default function MisMesasPage() {
 
                   <button
                     onClick={() => router.push(`/m/${saved.slug}`)}
+                    data-testid={`go-to-table-btn-${saved.slug}`}
+                    aria-label={`${t("home.goToRoom")} ${title}`}
                     className="px-4 py-2.5 ios-btn-amber text-zinc-950 rounded-2xl text-xs font-black flex items-center gap-1.5 transition-all shadow-md shadow-amber-500/15 active:scale-95"
                   >
                     <span>{t("home.goToRoom")}</span>
@@ -405,6 +411,9 @@ export default function MisMesasPage() {
 
         <form onSubmit={handleImportPoll} className="flex flex-col sm:flex-row gap-2.5 pt-1">
           <input
+            id="import-poll-input"
+            data-testid="import-poll-input"
+            aria-label={t("misMesas.importTitle")}
             type="text"
             value={importInput}
             onChange={(e) => setImportInput(e.target.value)}
@@ -414,6 +423,8 @@ export default function MisMesasPage() {
           <button
             type="submit"
             disabled={importLoading || !importInput.trim()}
+            data-testid="import-poll-btn"
+            aria-label={importLoading ? t("common.loading") : t("misMesas.importBtn")}
             className="px-4 py-2.5 liquid-glass-subtle hover:bg-white/[0.12] disabled:opacity-50 text-zinc-200 rounded-2xl text-xs font-bold transition-all border border-white/15 flex items-center justify-center gap-1.5 active:scale-95"
           >
             {importLoading ? t("common.loading") : t("misMesas.importBtn")}

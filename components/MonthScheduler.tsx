@@ -24,8 +24,11 @@ import {
   LayoutGrid,
   List,
   Plus,
+  MessageSquare,
+  Edit3,
+  Trash2,
 } from "lucide-react";
-import { Poll, AvailabilityMap } from "@/lib/supabase";
+import { Poll, AvailabilityMap, DateComment, DateCommentsMap } from "@/lib/supabase";
 import ClaimCharacterModal from "@/components/ClaimCharacterModal";
 import { saveCreatedPoll } from "@/lib/storage";
 import {
@@ -50,15 +53,41 @@ const WEEKDAY_NAMES_SHORT: Record<SupportedLocale, string[]> = {
   en: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
 };
 
+/**
+ * Formatea el tiempo relativo de un comentario (ej: 5m, 2h, o fecha corta)
+ */
+function formatCommentTime(isoString: string, currentLocale: SupportedLocale): string {
+  try {
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return "";
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+
+    if (diffMins < 1) return currentLocale === "en" ? "Just now" : "Recién";
+    if (diffMins < 60) return `${diffMins}m`;
+    if (diffHours < 24) return `${diffHours}h`;
+    return date.toLocaleDateString(currentLocale === "en" ? "en-US" : "es-ES", {
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return "";
+  }
+}
+
 interface MonthSchedulerProps {
   initialPoll: Poll;
-  onUpdateAvailability: (newAvailability: AvailabilityMap) => Promise<boolean>;
+  onUpdateAvailability: (newAvailability: AvailabilityMap, newComments?: DateCommentsMap) => Promise<boolean>;
+  onUpdateComments?: (newComments: DateCommentsMap) => Promise<boolean>;
   isRealtimeConnected: boolean;
 }
 
 export default function MonthScheduler({
   initialPoll,
   onUpdateAvailability,
+  onUpdateComments,
   isRealtimeConnected,
 }: MonthSchedulerProps) {
   const { t, locale } = useLanguage();
@@ -119,15 +148,41 @@ export default function MonthScheduler({
 
   // Referencias para evitar condiciones de carrera en clics rápidos y sincronización
   const availabilityRef = useRef<AvailabilityMap>(initialPoll.availability);
+  const commentsRef = useRef<DateCommentsMap>(initialPoll.comments || {});
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const quickNoteTimerRef = useRef<NodeJS.Timeout | null>(null);
   const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isSavingRef = useRef<boolean>(false);
-  const pendingSaveRef = useRef<AvailabilityMap | null>(null);
+  const pendingSaveRef = useRef<{ availability: AvailabilityMap; comments?: DateCommentsMap } | null>(null);
   const selectedPlayerRef = useRef<string>(selectedPlayer);
+
+  // Estados para notas y comentarios
+  const [quickNoteDate, setQuickNoteDate] = useState<string | null>(null);
+  const [commentInput, setCommentInput] = useState<string>("");
+  const [isEditingComment, setIsEditingComment] = useState<boolean>(false);
+  const [isSavingComment, setIsSavingComment] = useState<boolean>(false);
+  const [confirmUnmarkDate, setConfirmUnmarkDate] = useState<{
+    dateStr: string;
+    commentText: string;
+  } | null>(null);
 
   useEffect(() => {
     selectedPlayerRef.current = selectedPlayer;
   }, [selectedPlayer]);
+
+  // Cerrar modal de confirmación de desmarcado al presionar Escape
+  useEffect(() => {
+    if (!confirmUnmarkDate) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setConfirmUnmarkDate(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [confirmUnmarkDate]);
 
   // Sincronizar estado local con props entrantes (Realtime)
   useEffect(() => {
@@ -151,20 +206,51 @@ export default function MonthScheduler({
         });
 
         availabilityRef.current = merged;
-        setPoll((prev) => ({ ...initialPoll, availability: merged }));
+        commentsRef.current = initialPoll.comments || {};
+        setPoll((prev) => ({
+          ...initialPoll,
+          availability: merged,
+          comments: initialPoll.comments || {},
+        }));
         return;
       }
     }
 
     availabilityRef.current = initialPoll.availability;
+    commentsRef.current = initialPoll.comments || {};
     setPoll(initialPoll);
   }, [initialPoll]);
+
+  // Auto-descartar el banner de nota rápida tras 5 segundos
+  useEffect(() => {
+    if (!quickNoteDate) return;
+    if (quickNoteTimerRef.current) {
+      clearTimeout(quickNoteTimerRef.current);
+    }
+    quickNoteTimerRef.current = setTimeout(() => {
+      setQuickNoteDate(null);
+    }, 5000);
+    return () => {
+      if (quickNoteTimerRef.current) {
+        clearTimeout(quickNoteTimerRef.current);
+      }
+    };
+  }, [quickNoteDate]);
+
+  // Limpiar formulario de comentario al abrir o cambiar de día en el modal de detalle
+  useEffect(() => {
+    setCommentInput("");
+    setIsEditingComment(false);
+  }, [activeDayModal?.dateString]);
 
   // Limpiar timers al desmontar
   useEffect(() => {
     return () => {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
+      }
+      if (quickNoteTimerRef.current) {
+        clearTimeout(quickNoteTimerRef.current);
       }
       if (copyTimeoutRef.current) {
         clearTimeout(copyTimeoutRef.current);
@@ -310,7 +396,7 @@ export default function MonthScheduler({
     isSavingRef.current = true;
 
     try {
-      await onUpdateAvailability(dataToSave);
+      await onUpdateAvailability(dataToSave.availability, dataToSave.comments);
     } finally {
       isSavingRef.current = false;
       if (pendingSaveRef.current) {
@@ -321,8 +407,11 @@ export default function MonthScheduler({
     }
   }, [onUpdateAvailability]);
 
-  const triggerDebouncedSave = useCallback((newAvailability: AvailabilityMap) => {
-    pendingSaveRef.current = newAvailability;
+  const triggerDebouncedSave = useCallback((newAvailability: AvailabilityMap, newComments?: DateCommentsMap) => {
+    pendingSaveRef.current = {
+      availability: newAvailability,
+      comments: newComments ?? commentsRef.current,
+    };
     setIsUpdating(true);
 
     if (debounceTimerRef.current) {
@@ -336,7 +425,7 @@ export default function MonthScheduler({
   }, [flushPendingSave]);
 
   // Alternar disponibilidad del jugador actual para una fecha de manera inmediata y fluida
-  const toggleDateAvailability = (dateStr: string) => {
+  const toggleDateAvailability = (dateStr: string, bypassConfirmation: boolean = false) => {
     if (dateStr < todayDateStr) {
       return;
     }
@@ -350,6 +439,20 @@ export default function MonthScheduler({
     const currentVoters = currentAvailability[dateStr] || [];
     const isCurrentlyAvailable = currentVoters.includes(selectedPlayer);
 
+    // Si el jugador ya está disponible y tiene una nota registrada en esta fecha,
+    // interceptamos con un modal de confirmación antes de desmarcar y eliminar la nota
+    if (isCurrentlyAvailable && !bypassConfirmation) {
+      const currentComments = commentsRef.current || {};
+      const userComment = (currentComments[dateStr] || []).find((c) => c.author === selectedPlayer);
+      if (userComment) {
+        setConfirmUnmarkDate({
+          dateStr,
+          commentText: userComment.text,
+        });
+        return;
+      }
+    }
+
     const updatedVoters = isCurrentlyAvailable
       ? currentVoters.filter((name) => name !== selectedPlayer)
       : [...currentVoters, selectedPlayer];
@@ -362,13 +465,34 @@ export default function MonthScheduler({
     // 1. Actualizamos la referencia sincrónicamente al instante
     availabilityRef.current = nextAvailability;
 
-    // 2. Actualizamos el estado de React inmediatamente para respuesta visual instantánea
+    // 2. Manejo de notas:
+    let nextComments: DateCommentsMap = commentsRef.current || {};
+    if (isCurrentlyAvailable) {
+      // Si el jugador se desmarca, se elimina automáticamente su nota para ese día
+      const dateComments = nextComments[dateStr] || [];
+      if (dateComments.some((c) => c.author === selectedPlayer)) {
+        nextComments = {
+          ...nextComments,
+          [dateStr]: dateComments.filter((c) => c.author !== selectedPlayer),
+        };
+        commentsRef.current = nextComments;
+      }
+      if (quickNoteDate === dateStr) {
+        setQuickNoteDate(null);
+      }
+    } else {
+      // Si se marca disponible, activamos el aviso de "Añadir nota"
+      setQuickNoteDate(dateStr);
+    }
+
+    // 3. Actualizamos el estado de React inmediatamente para respuesta visual instantánea
     setPoll((prev) => ({
       ...prev,
       availability: nextAvailability,
+      comments: nextComments,
     }));
 
-    // 3. Celebración con confeti si con este voto se alcanza el 100% de quórum
+    // 4. Celebración con confeti si con este voto se alcanza el 100% de quórum
     if (!isCurrentlyAvailable && updatedVoters.length === totalParticipants && totalParticipants > 0) {
       confetti({
         particleCount: 120,
@@ -378,15 +502,97 @@ export default function MonthScheduler({
       });
     }
 
-    // 4. Guardado debounced (agrupa clics seguidos en una sola petición)
-    triggerDebouncedSave(nextAvailability);
+    // 5. Guardado debounced (agrupa clics seguidos en una sola petición)
+    triggerDebouncedSave(nextAvailability, nextComments);
 
-    // 5. Progreso del tutorial interactivo
+    // 6. Progreso del tutorial interactivo
     completeStep("room_vote");
     if (!isStepCompleted("room_views")) {
       setTimeout(() => {
         triggerStep("room_views");
       }, 600);
+    }
+  };
+
+  // Guardar o actualizar comentario de una fecha
+  const handleSaveComment = async (dateStr: string, text: string) => {
+    if (!selectedPlayer || !text.trim()) return;
+
+    setIsSavingComment(true);
+    try {
+      const trimmed = text.trim().slice(0, 140);
+      const currentComments = commentsRef.current || {};
+      const dateComments = currentComments[dateStr] || [];
+      const existingIndex = dateComments.findIndex((c) => c.author === selectedPlayer);
+
+      let updatedList: DateComment[];
+      if (existingIndex >= 0) {
+        updatedList = [...dateComments];
+        updatedList[existingIndex] = {
+          ...updatedList[existingIndex],
+          text: trimmed,
+          createdAt: new Date().toISOString(),
+        };
+      } else {
+        const newComment: DateComment = {
+          id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          author: selectedPlayer,
+          text: trimmed,
+          createdAt: new Date().toISOString(),
+        };
+        updatedList = [...dateComments, newComment];
+      }
+
+      const nextComments: DateCommentsMap = {
+        ...currentComments,
+        [dateStr]: updatedList,
+      };
+
+      commentsRef.current = nextComments;
+      setPoll((prev) => ({ ...prev, comments: nextComments }));
+      setCommentInput("");
+      setIsEditingComment(false);
+
+      if (onUpdateComments) {
+        await onUpdateComments(nextComments);
+      } else {
+        await onUpdateAvailability(availabilityRef.current, nextComments);
+      }
+    } finally {
+      setIsSavingComment(false);
+    }
+  };
+
+  // Eliminar comentario de una fecha
+  const handleDeleteComment = async (dateStr: string, commentId: string) => {
+    if (!selectedPlayer) return;
+
+    setIsSavingComment(true);
+    try {
+      const currentComments = commentsRef.current || {};
+      const dateComments = currentComments[dateStr] || [];
+      const commentToDelete = dateComments.find((c) => c.id === commentId);
+
+      if (!commentToDelete || commentToDelete.author !== selectedPlayer) return;
+
+      const updatedList = dateComments.filter((c) => c.id !== commentId);
+      const nextComments: DateCommentsMap = {
+        ...currentComments,
+        [dateStr]: updatedList,
+      };
+
+      commentsRef.current = nextComments;
+      setPoll((prev) => ({ ...prev, comments: nextComments }));
+      setCommentInput("");
+      setIsEditingComment(false);
+
+      if (onUpdateComments) {
+        await onUpdateComments(nextComments);
+      } else {
+        await onUpdateAvailability(availabilityRef.current, nextComments);
+      }
+    } finally {
+      setIsSavingComment(false);
     }
   };
 
@@ -410,7 +616,8 @@ export default function MonthScheduler({
       poll.participants,
       confirmedDates,
       currentUrl,
-      locale
+      locale,
+      poll.comments
     );
 
     navigator.clipboard.writeText(summary);
@@ -522,6 +729,8 @@ export default function MonthScheduler({
                   <button
                     type="button"
                     onClick={handleOpenClaimModal}
+                    data-testid="claim-change-btn"
+                    aria-label={locale === "en" ? "Change character" : "Cambiar personaje"}
                     className="text-[11px] font-bold text-zinc-400 hover:text-amber-300 underline decoration-zinc-700 hover:decoration-amber-300 transition-colors active:scale-95"
                   >
                     {locale === "en" ? "Change" : "Cambiar"}
@@ -585,6 +794,8 @@ export default function MonthScheduler({
                   <button
                     type="button"
                     onClick={handleOpenClaimModal}
+                    data-testid="claim-character-btn"
+                    aria-label={locale === "en" ? "Claim character" : "Elegir personaje"}
                     className="px-3.5 py-1.5 ios-btn-amber text-zinc-950 rounded-xl text-xs font-black transition-all shadow-sm flex-shrink-0 active:scale-95"
                   >
                     {locale === "en" ? "Claim character" : "Elegir personaje"}
@@ -629,6 +840,8 @@ export default function MonthScheduler({
                       target="_blank"
                       rel="noopener noreferrer"
                       title={locale === "en" ? "Click to add to Google Calendar" : "Clic para agendar esta fecha en Google Calendar"}
+                      aria-label={`${locale === "en" ? "Schedule date" : "Agendar fecha"} ${formatFriendlyDate(d, locale)}`}
+                      data-testid={`banner-calendar-link-${d}`}
                       className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-100 font-bold text-xs transition-all hover:scale-105 active:scale-95"
                     >
                       <span>{formatFriendlyDate(d, locale)}</span>
@@ -642,6 +855,8 @@ export default function MonthScheduler({
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <button
               onClick={handleCopyWhatsApp}
+              data-testid="banner-export-whatsapp-btn"
+              aria-label={copiedWhatsApp ? t("home.copied") : t("scheduler.whatsAppBtn")}
               className="flex-1 sm:flex-initial px-3.5 py-2 ios-btn-emerald text-white rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95"
             >
               <Copy className="w-3.5 h-3.5" />
@@ -649,6 +864,8 @@ export default function MonthScheduler({
             </button>
             <button
               onClick={handleDownloadIcs}
+              data-testid="banner-export-ics-btn"
+              aria-label={t("scheduler.downloadIcsBtn")}
               className="flex-1 sm:flex-initial px-3.5 py-2 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-200 rounded-2xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all border border-white/15 active:scale-95"
               title={locale === "en" ? "Download .ics file" : "Descargar archivo .ics"}
             >
@@ -692,6 +909,8 @@ export default function MonthScheduler({
                   setViewMode("list");
                   completeStep("room_views");
                 }}
+                data-testid="mobile-view-agenda-btn"
+                aria-label={t("scheduler.viewAgenda")}
                 className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${
                   viewMode === "list"
                     ? "ios-segmented-active"
@@ -705,6 +924,8 @@ export default function MonthScheduler({
               <button
                 type="button"
                 onClick={() => setViewMode("grid")}
+                data-testid="mobile-view-month-btn"
+                aria-label={t("scheduler.viewMonth")}
                 className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${
                   viewMode === "grid"
                     ? "ios-segmented-active"
@@ -743,6 +964,8 @@ export default function MonthScheduler({
                   setViewMode("grid");
                   completeStep("room_views");
                 }}
+                data-testid="desktop-view-month-btn"
+                aria-label={t("scheduler.viewMonth")}
                 className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${
                   viewMode === "grid"
                     ? "ios-segmented-active"
@@ -758,6 +981,8 @@ export default function MonthScheduler({
                   setViewMode("list");
                   completeStep("room_views");
                 }}
+                data-testid="desktop-view-agenda-btn"
+                aria-label={t("scheduler.viewAgenda")}
                 className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${
                   viewMode === "list"
                     ? "ios-segmented-active"
@@ -777,6 +1002,8 @@ export default function MonthScheduler({
             <button
               type="button"
               onClick={() => setListFilter("all")}
+              data-testid="filter-all-btn"
+              aria-label={t("scheduler.filterUpcoming", { count: upcomingMonthDays.length })}
               className={`px-3.5 py-1.5 rounded-2xl font-bold whitespace-nowrap transition-all active:scale-95 ${
                 listFilter === "all"
                   ? "ios-segmented-active"
@@ -788,6 +1015,8 @@ export default function MonthScheduler({
             <button
               type="button"
               onClick={() => setListFilter("weekends")}
+              data-testid="filter-weekends-btn"
+              aria-label={t("scheduler.filterWeekends")}
               className={`px-3.5 py-1.5 rounded-2xl font-bold whitespace-nowrap transition-all flex items-center gap-1.5 active:scale-95 ${
                 listFilter === "weekends"
                   ? "ios-segmented-active"
@@ -800,6 +1029,8 @@ export default function MonthScheduler({
             <button
               type="button"
               onClick={() => setListFilter("quorum")}
+              data-testid="filter-quorum-btn"
+              aria-label={t("scheduler.filterWithVotes")}
               className={`px-3.5 py-1.5 rounded-2xl font-bold whitespace-nowrap transition-all flex items-center gap-1.5 active:scale-95 ${
                 listFilter === "quorum"
                   ? "ios-segmented-active"
@@ -837,6 +1068,7 @@ export default function MonthScheduler({
                   return (
                     <div
                       key={dateKey}
+                      data-testid={`agenda-row-${dateKey}`}
                       className={`p-3.5 sm:p-4 rounded-3xl border transition-all duration-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative overflow-hidden ${
                         isQuorumReached
                           ? "bg-emerald-500/[0.14] border-emerald-400/60 shadow-[0_8px_24px_-4px_rgba(16,185,129,0.25)]"
@@ -942,37 +1174,80 @@ export default function MonthScheduler({
                                 : "Nadie ha marcado disponibilidad aún."}
                             </p>
                           )}
+                          {/* Notas registradas en esta fecha */}
+                          {(() => {
+                            const dateNotes = (poll.comments && poll.comments[dateKey]) || [];
+                            if (dateNotes.length === 0) return null;
+                            return (
+                              <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-white/[0.04]">
+                                <span className="inline-flex items-center gap-1 text-[10px] text-amber-400 font-bold uppercase tracking-wider">
+                                  <MessageSquare className="w-3 h-3" />
+                                  <span>{t("scheduler.dateNotesTitle")}:</span>
+                                </span>
+                                {dateNotes.map((note) => (
+                                  <span
+                                    key={note.id}
+                                    className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] px-2.5 py-0.5 rounded-xl bg-amber-500/10 border border-amber-400/20 text-zinc-200"
+                                  >
+                                    <strong className="text-amber-300 font-bold">{note.author}:</strong>
+                                    <span>&ldquo;{note.text}&rdquo;</span>
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
 
                       {/* Botón de acción táctil estilo iOS */}
                       <div className="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-white/[0.08] justify-end flex-shrink-0">
                         {selectedPlayer ? (
-                          <button
-                            type="button"
-                            onClick={() => toggleDateAvailability(dateKey)}
-                            className={`w-full sm:w-auto min-h-[44px] px-5 py-2 rounded-2xl text-xs font-black transition-all shadow-md flex items-center justify-center gap-2 active:scale-95 ${
-                              isSelectedPlayerVoted
-                                ? "ios-btn-emerald text-white shadow-emerald-950/40"
-                                : "liquid-glass-subtle hover:bg-white/[0.12] text-zinc-100 border border-white/15"
-                            }`}
-                          >
-                            {isSelectedPlayerVoted ? (
-                              <>
-                                <Check className="w-4 h-4 stroke-[3]" />
-                                <span>{locale === "en" ? "Available" : "Disponible"}</span>
-                              </>
-                            ) : (
-                              <>
-                                <Plus className="w-4 h-4" />
-                                <span>{locale === "en" ? "Mark available" : "Marcar disponible"}</span>
-                              </>
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => toggleDateAvailability(dateKey)}
+                              data-testid={`agenda-toggle-btn-${dateKey}`}
+                              aria-label={`${isSelectedPlayerVoted ? (locale === "en" ? "Unmark availability for" : "Desmarcar disponibilidad para") : (locale === "en" ? "Mark available for" : "Marcar disponible para")} ${formatFriendlyDate(dateKey, locale)}`}
+                              className={`w-full sm:w-auto min-h-[44px] px-5 py-2 rounded-2xl text-xs font-black transition-all shadow-md flex items-center justify-center gap-2 active:scale-95 ${
+                                isSelectedPlayerVoted
+                                  ? "ios-btn-emerald text-white shadow-emerald-950/40"
+                                  : "liquid-glass-subtle hover:bg-white/[0.12] text-zinc-100 border border-white/15"
+                              }`}
+                            >
+                              {isSelectedPlayerVoted ? (
+                                <>
+                                  <Check className="w-4 h-4 stroke-[3]" />
+                                  <span>{locale === "en" ? "Available" : "Disponible"}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Plus className="w-4 h-4" />
+                                  <span>{locale === "en" ? "Mark available" : "Marcar disponible"}</span>
+                                </>
+                              )}
+                            </button>
+
+                            {/* Botón para abrir modal y añadir/editar nota si el día está marcado */}
+                            {isSelectedPlayerVoted && (
+                              <button
+                                type="button"
+                                onClick={() => setActiveDayModal(cellDay)}
+                                title={t("scheduler.addNoteBtn")}
+                                data-testid={`agenda-note-btn-${dateKey}`}
+                                aria-label={`${t("scheduler.addNoteBtn")} ${formatFriendlyDate(dateKey, locale)}`}
+                                className="min-h-[44px] px-3.5 py-2 liquid-glass-subtle hover:bg-white/[0.12] text-amber-300 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border border-amber-400/30 active:scale-95 shadow-sm"
+                              >
+                                <MessageSquare className="w-4 h-4" />
+                                <span className="hidden sm:inline">{t("scheduler.addNoteBtn")}</span>
+                              </button>
                             )}
-                          </button>
+                          </>
                         ) : (
                           <button
                             type="button"
                             onClick={() => setActiveDayModal(cellDay)}
+                            data-testid={`agenda-detail-btn-${dateKey}`}
+                            aria-label={`${t("scheduler.seeDetail")} ${formatFriendlyDate(dateKey, locale)}`}
                             className="w-full sm:w-auto min-h-[44px] px-5 py-2 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-200 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border border-white/15 active:scale-95"
                           >
                             <Eye className="w-3.5 h-3.5" />
@@ -1050,6 +1325,7 @@ export default function MonthScheduler({
                 return (
                   <div
                     key={dateKey}
+                    data-testid={`day-cell-${dateKey}`}
                     onClick={
                       isPastDate || !selectedPlayer
                         ? undefined
@@ -1121,8 +1397,8 @@ export default function MonthScheduler({
                       )}
                     </div>
 
-                    {/* Badge central de Quórum (ÚNICO elemento que abre el modal de detalle de asistencia) */}
-                    <div className="my-auto py-0.5 sm:py-1 flex justify-center">
+                    {/* Badge central de Quórum + Indicador de notas */}
+                    <div className="my-auto py-0.5 sm:py-1 flex items-center justify-center gap-1 flex-wrap">
                       <button
                         type="button"
                         onClick={(e) => {
@@ -1130,6 +1406,8 @@ export default function MonthScheduler({
                           setActiveDayModal(cellDay);
                         }}
                         title={locale === "en" ? "Click to see who voted on this day" : "Clic para ver quiénes votaron este día"}
+                        aria-label={`${locale === "en" ? "View votes for" : "Ver votantes de"} ${formatFriendlyDate(dateKey, locale)}`}
+                        data-testid={`quorum-btn-${dateKey}`}
                         className="cursor-pointer transition-transform hover:scale-105 active:scale-95 focus:outline-none"
                       >
                         {isQuorumReached ? (
@@ -1151,6 +1429,32 @@ export default function MonthScheduler({
                           </div>
                         )}
                       </button>
+
+                      {/* Badge indicador de notas */}
+                      {(() => {
+                        const dateNotes = (poll.comments && poll.comments[dateKey]) || [];
+                        if (dateNotes.length === 0) return null;
+                        return (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveDayModal(cellDay);
+                            }}
+                            title={
+                              locale === "en"
+                                ? `${dateNotes.length} note(s) on this date`
+                                : `${dateNotes.length} nota(s) en esta fecha`
+                            }
+                            aria-label={`${locale === "en" ? "View notes for" : "Ver notas de"} ${formatFriendlyDate(dateKey, locale)}`}
+                            data-testid={`notes-btn-${dateKey}`}
+                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-300 text-[9px] sm:text-[10px] font-bold transition-transform hover:scale-105 active:scale-95 shadow-sm"
+                          >
+                            <MessageSquare className="w-2.5 h-2.5" />
+                            <span>{dateNotes.length}</span>
+                          </button>
+                        );
+                      })()}
                     </div>
 
                     {/* Mini Barra de progreso visual */}
@@ -1257,6 +1561,28 @@ export default function MonthScheduler({
                               </div>
                             </div>
                           )}
+
+                          {/* Notas registradas en este día */}
+                          {(() => {
+                            const dateNotes = (poll.comments && poll.comments[dateKey]) || [];
+                            if (dateNotes.length === 0) return null;
+                            return (
+                              <div className="pt-2 border-t border-white/[0.08] space-y-1">
+                                <div className="text-[10px] text-amber-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                                  <MessageSquare className="w-3 h-3" />
+                                  <span>{t("scheduler.dateNotesTitle")} ({dateNotes.length})</span>
+                                </div>
+                                <div className="space-y-1 max-h-24 overflow-y-auto">
+                                  {dateNotes.map((note) => (
+                                    <div key={note.id} className="text-[11px] bg-white/5 rounded-lg p-1.5 border border-white/10">
+                                      <span className="font-bold text-amber-300">{note.author}: </span>
+                                      <span className="text-zinc-200">&ldquo;{note.text}&rdquo;</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
                     )}
@@ -1291,6 +1617,8 @@ export default function MonthScheduler({
           {/* Botón WhatsApp */}
           <button
             onClick={handleCopyWhatsApp}
+            data-testid="export-whatsapp-btn"
+            aria-label={copiedWhatsApp ? t("scheduler.whatsAppCopied") : t("scheduler.whatsAppBtn")}
             className="flex-1 sm:flex-initial px-4 py-2.5 ios-btn-emerald text-white rounded-2xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-md active:scale-95"
           >
             <Copy className="w-4 h-4" />
@@ -1301,6 +1629,8 @@ export default function MonthScheduler({
           {confirmedDates.length === 0 ? (
             <button
               disabled
+              data-testid="export-google-cal-disabled-btn"
+              aria-label={t("scheduler.googleCalBtn")}
               className="flex-1 sm:flex-initial px-4 py-2.5 bg-black/20 text-zinc-500 rounded-2xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 cursor-not-allowed border border-white/[0.04]"
               title={t("scheduler.googleCalDisabledTitle")}
             >
@@ -1312,6 +1642,8 @@ export default function MonthScheduler({
               href={generateGoogleCalendarUrl(poll.title, confirmedDates[0], undefined, locale)}
               target="_blank"
               rel="noopener noreferrer"
+              data-testid="export-google-cal-btn"
+              aria-label={`${t("scheduler.googleCalBtn")} ${formatFriendlyDate(confirmedDates[0], locale)}`}
               className="flex-1 sm:flex-initial px-4 py-2.5 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-100 rounded-2xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all border border-white/15 active:scale-95 shadow-sm"
               title={t("scheduler.scheduleDate", { date: formatFriendlyDate(confirmedDates[0], locale) })}
             >
@@ -1324,6 +1656,8 @@ export default function MonthScheduler({
               <button
                 type="button"
                 onClick={() => setShowGoogleDropdown((prev) => !prev)}
+                data-testid="export-google-cal-dropdown-btn"
+                aria-label={t("scheduler.googleCalCount", { count: confirmedDates.length })}
                 className="w-full px-4 py-2.5 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-100 rounded-2xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all border border-white/15 active:scale-95 shadow-sm"
               >
                 <CalendarPlus className="w-4 h-4 text-blue-400" />
@@ -1373,6 +1707,8 @@ export default function MonthScheduler({
                         });
                         setShowGoogleDropdown(false);
                       }}
+                      data-testid="export-google-cal-all-btn"
+                      aria-label={t("scheduler.openAllTabs")}
                       className="w-full py-2 px-3.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-400/30 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95"
                     >
                       <CalendarPlus className="w-3.5 h-3.5" />
@@ -1393,6 +1729,8 @@ export default function MonthScheduler({
           <button
             onClick={handleDownloadIcs}
             disabled={confirmedDates.length === 0}
+            data-testid="export-ical-btn"
+            aria-label={t("scheduler.downloadIcsBtn")}
             className={`flex-1 sm:flex-initial px-4 py-2.5 rounded-2xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all border ${
               confirmedDates.length > 0
                 ? "liquid-glass-subtle hover:bg-white/[0.12] text-zinc-100 border-white/15 active:scale-95"
@@ -1414,6 +1752,10 @@ export default function MonthScheduler({
             }
           }}
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-xl animate-in fade-in duration-200 cursor-pointer"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="day-detail-title"
+          data-testid="day-detail-modal"
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -1426,6 +1768,8 @@ export default function MonthScheduler({
               onClick={() => setActiveDayModal(null)}
               className="absolute top-5 right-5 p-2 text-zinc-400 hover:text-white rounded-2xl hover:bg-white/10 transition-colors"
               title={t("common.close")}
+              aria-label={t("common.close")}
+              data-testid="day-detail-close-btn"
             >
               <X className="w-5 h-5" />
             </button>
@@ -1434,7 +1778,7 @@ export default function MonthScheduler({
               <div className="text-[11px] font-bold text-amber-300 uppercase tracking-wider">
                 {t("scheduler.dayDetailHeader")}
               </div>
-              <h3 className="text-xl font-black text-zinc-100 tracking-tight mt-1">
+              <h3 id="day-detail-title" className="text-xl font-black text-zinc-100 tracking-tight mt-1">
                 {formatFriendlyDate(activeDayModal.dateString, locale)}
               </h3>
             </div>
@@ -1503,6 +1847,165 @@ export default function MonthScheduler({
                     </div>
                   )}
 
+                  {/* Sección: Notas de la fecha */}
+                  <div className="space-y-2.5 pt-2 border-t border-white/10">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-zinc-300 uppercase tracking-wider block text-[10px] flex items-center gap-1.5">
+                        <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
+                        <span>{t("scheduler.dateNotesTitle")}</span>
+                      </span>
+                      {(() => {
+                        const dateNotes = (poll.comments && poll.comments[activeDayModal.dateString]) || [];
+                        if (dateNotes.length === 0) return null;
+                        return (
+                          <span className="text-[10px] text-amber-400 font-bold px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-400/20">
+                            {dateNotes.length === 1
+                              ? t("scheduler.oneNoteBadge")
+                              : t("scheduler.notesCountBadge", { count: dateNotes.length })}
+                          </span>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Lista de notas existentes */}
+                    {(() => {
+                      const dateNotes = (poll.comments && poll.comments[activeDayModal.dateString]) || [];
+                      if (dateNotes.length === 0) {
+                        return (
+                          <p className="text-zinc-500 italic text-xs py-1">
+                            {t("scheduler.noDateNotes")}
+                          </p>
+                        );
+                      }
+                      return (
+                        <div className="space-y-2 max-h-44 overflow-y-auto pr-0.5">
+                          {dateNotes.map((note) => {
+                            const isMyNote = selectedPlayer === note.author;
+                            return (
+                              <div
+                                key={note.id}
+                                data-testid={`note-item-${note.id}`}
+                                className={`p-2.5 rounded-2xl border text-xs space-y-1 transition-colors ${
+                                  isMyNote
+                                    ? "bg-amber-500/10 border-amber-400/30 text-zinc-100"
+                                    : "liquid-glass-subtle border-white/10 text-zinc-300"
+                                }`}
+                              >
+                                <div className="flex items-center justify-between text-[10px]">
+                                  <div className="flex items-center gap-1.5">
+                                    <span
+                                      className={`font-black ${
+                                        isMyNote ? "text-amber-300" : "text-zinc-200"
+                                      }`}
+                                    >
+                                      {note.author}
+                                    </span>
+                                    {isMyNote && (
+                                      <span className="px-1.5 py-0.2 rounded-md bg-amber-400/20 text-amber-300 font-bold text-[9px]">
+                                        {locale === "en" ? "You" : "Tú"}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-zinc-500 text-[10px]">
+                                      {formatCommentTime(note.createdAt, locale)}
+                                    </span>
+                                    {isMyNote && (
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setCommentInput(note.text);
+                                            setIsEditingComment(true);
+                                          }}
+                                          title={t("scheduler.editNoteBtn")}
+                                          aria-label={t("scheduler.editNoteBtn")}
+                                          data-testid={`note-edit-btn-${note.id}`}
+                                          className="p-1 hover:text-amber-300 text-zinc-400 transition-colors"
+                                        >
+                                          <Edit3 className="w-3 h-3" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteComment(activeDayModal.dateString, note.id)}
+                                          title={t("scheduler.deleteNoteBtn")}
+                                          aria-label={t("scheduler.deleteNoteBtn")}
+                                          data-testid={`note-delete-btn-${note.id}`}
+                                          className="p-1 hover:text-red-400 text-zinc-400 transition-colors"
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                <p className="text-zinc-200 text-xs leading-relaxed break-words font-medium">
+                                  &ldquo;{note.text}&rdquo;
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Formulario para agregar / editar nota */}
+                    {selectedPlayer && voters.includes(selectedPlayer) && activeDayModal.dateString >= todayDateStr ? (
+                      <div className="pt-2 space-y-2">
+                        <div className="relative">
+                          <textarea
+                            id="date-comment-input"
+                            data-testid="date-comment-input"
+                            aria-label={t("scheduler.notePlaceholder")}
+                            value={commentInput}
+                            onChange={(e) => setCommentInput(e.target.value.slice(0, 140))}
+                            placeholder={t("scheduler.notePlaceholder")}
+                            maxLength={140}
+                            rows={2}
+                            className="w-full text-xs p-3 rounded-2xl bg-black/40 border border-white/15 text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-amber-400/60 focus:ring-1 focus:ring-amber-400/40 resize-none transition-colors"
+                          />
+                          <div className="absolute right-2.5 bottom-2 text-[10px] font-medium text-zinc-500 pointer-events-none">
+                            {commentInput.length}/140
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2">
+                          {isEditingComment && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsEditingComment(false);
+                                const currentComments = poll.comments?.[activeDayModal.dateString] || [];
+                                const existing = currentComments.find((c) => c.author === selectedPlayer);
+                                setCommentInput(existing ? existing.text : "");
+                              }}
+                              data-testid="cancel-note-btn"
+                              aria-label={t("scheduler.cancelNoteBtn")}
+                              className="px-3 py-1.5 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white liquid-glass-subtle border border-white/10 transition-colors"
+                            >
+                              {t("scheduler.cancelNoteBtn")}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            disabled={!commentInput.trim() || isSavingComment}
+                            onClick={() => handleSaveComment(activeDayModal.dateString, commentInput)}
+                            data-testid="save-note-btn"
+                            aria-label={t("scheduler.saveNoteBtn")}
+                            className="px-4 py-1.5 rounded-xl text-xs font-black ios-btn-amber text-zinc-950 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm transition-all flex items-center gap-1.5"
+                          >
+                            {isSavingComment && <Loader2 className="w-3 h-3 animate-spin" />}
+                            <span>{t("scheduler.saveNoteBtn")}</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : selectedPlayer && !voters.includes(selectedPlayer) && activeDayModal.dateString >= todayDateStr ? (
+                      <p className="text-[11px] text-zinc-500 italic bg-white/[0.02] p-2.5 rounded-xl border border-white/[0.05]">
+                        💡 {t("scheduler.onlyVotersCanNote")}
+                      </p>
+                    ) : null}
+                  </div>
+
                   {/* Si el usuario tiene personaje seleccionado y el día no ha pasado, botón directo de votar */}
                   {selectedPlayer && activeDayModal.dateString >= todayDateStr && (
                     <div className="pt-3 border-t border-white/10">
@@ -1511,6 +2014,8 @@ export default function MonthScheduler({
                         onClick={() => {
                           toggleDateAvailability(activeDayModal.dateString);
                         }}
+                        data-testid="modal-toggle-vote-btn"
+                        aria-label={voters.includes(selectedPlayer) ? t("scheduler.removeMyAvailability") : t("scheduler.markMeAvailable")}
                         className={`w-full py-3 px-4 rounded-2xl text-xs font-black transition-all shadow-md flex items-center justify-center gap-2 active:scale-95 ${
                           voters.includes(selectedPlayer)
                             ? "bg-red-500/20 hover:bg-red-500/30 border border-red-400/40 text-red-200"
@@ -1534,6 +2039,114 @@ export default function MonthScheduler({
                 </div>
               );
             })()}
+          </div>
+        </div>
+      )}
+
+      {/* Toast rápido al marcar disponibilidad: "Añadir nota" */}
+      {quickNoteDate && (
+        <div
+          data-testid="quick-note-toast"
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl liquid-glass-elevated border border-amber-400/40 shadow-2xl animate-in slide-in-from-bottom-5"
+        >
+          <MessageSquare className="w-4 h-4 text-amber-400 shrink-0" />
+          <span className="text-xs text-zinc-200">
+            {t("scheduler.quickNoteToast")} (<strong>{formatFriendlyDate(quickNoteDate, locale)}</strong>)
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              const day = calendarDays.find((d) => d.dateString === quickNoteDate);
+              if (day) {
+                setActiveDayModal(day);
+              }
+              setQuickNoteDate(null);
+            }}
+            data-testid="quick-note-add-btn"
+            aria-label={t("scheduler.addNoteBtn")}
+            className="px-3 py-1 text-xs font-bold rounded-xl ios-btn-amber text-zinc-950 shadow-sm transition-all active:scale-95"
+          >
+            {t("scheduler.addNoteBtn")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setQuickNoteDate(null)}
+            title={t("common.close")}
+            aria-label={t("common.close")}
+            data-testid="quick-note-close-btn"
+            className="text-zinc-400 hover:text-white p-1 rounded-lg transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Modal de confirmación para desmarcar fecha con nota */}
+      {confirmUnmarkDate && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setConfirmUnmarkDate(null);
+            }
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xl animate-in fade-in duration-200 cursor-pointer"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="confirm-unmark-title"
+          data-testid="confirm-unmark-modal"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-sm liquid-glass-elevated rounded-3xl p-6 shadow-2xl space-y-4 border border-amber-400/30 cursor-default"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto border border-amber-400/30">
+              <MessageSquare className="w-6 h-6" />
+            </div>
+
+            <div className="text-center space-y-1">
+              <h3 id="confirm-unmark-title" className="text-lg font-black text-zinc-100 tracking-tight">
+                {t("scheduler.confirmUnmarkTitle")}
+              </h3>
+              <p className="text-xs text-zinc-400">
+                {formatFriendlyDate(confirmUnmarkDate.dateStr, locale)}
+              </p>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <p className="text-zinc-300 text-center leading-relaxed">
+                {t("scheduler.confirmUnmarkDesc")}
+              </p>
+              <div className="p-3 rounded-2xl bg-black/40 border border-amber-400/20 text-amber-200/90 italic break-words text-center text-xs">
+                &ldquo;{confirmUnmarkDate.commentText}&rdquo;
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmUnmarkDate(null)}
+                data-testid="confirm-unmark-cancel-btn"
+                aria-label={t("common.cancel")}
+                className="flex-1 py-2.5 rounded-2xl text-xs font-semibold text-zinc-300 hover:text-white liquid-glass-subtle border border-white/10 transition-all active:scale-95"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const targetDate = confirmUnmarkDate.dateStr;
+                  setConfirmUnmarkDate(null);
+                  toggleDateAvailability(targetDate, true);
+                }}
+                data-testid="confirm-unmark-confirm-btn"
+                aria-label={t("scheduler.confirmUnmarkBtn")}
+                className="flex-1 py-2.5 rounded-2xl text-xs font-black bg-red-500 hover:bg-red-600 text-white shadow-md shadow-red-950/40 transition-all active:scale-95"
+              >
+                {t("scheduler.confirmUnmarkBtn")}
+              </button>
+            </div>
           </div>
         </div>
       )}
