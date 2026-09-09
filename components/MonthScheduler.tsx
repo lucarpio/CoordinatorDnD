@@ -161,10 +161,28 @@ export default function MonthScheduler({
   const [commentInput, setCommentInput] = useState<string>("");
   const [isEditingComment, setIsEditingComment] = useState<boolean>(false);
   const [isSavingComment, setIsSavingComment] = useState<boolean>(false);
+  const [confirmUnmarkDate, setConfirmUnmarkDate] = useState<{
+    dateStr: string;
+    commentText: string;
+  } | null>(null);
 
   useEffect(() => {
     selectedPlayerRef.current = selectedPlayer;
   }, [selectedPlayer]);
+
+  // Cerrar modal de confirmación de desmarcado al presionar Escape
+  useEffect(() => {
+    if (!confirmUnmarkDate) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setConfirmUnmarkDate(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [confirmUnmarkDate]);
 
   // Sincronizar estado local con props entrantes (Realtime)
   useEffect(() => {
@@ -219,23 +237,11 @@ export default function MonthScheduler({
     };
   }, [quickNoteDate]);
 
-  // Sincronizar formulario de comentario cuando se abre el modal de detalle
+  // Limpiar formulario de comentario al abrir o cambiar de día en el modal de detalle
   useEffect(() => {
-    if (!activeDayModal || !selectedPlayer) {
-      setCommentInput("");
-      setIsEditingComment(false);
-      return;
-    }
-    const currentComments = poll.comments?.[activeDayModal.dateString] || [];
-    const existing = currentComments.find((c) => c.author === selectedPlayer);
-    if (existing) {
-      setCommentInput(existing.text);
-      setIsEditingComment(false);
-    } else {
-      setCommentInput("");
-      setIsEditingComment(false);
-    }
-  }, [activeDayModal, selectedPlayer, poll.comments]);
+    setCommentInput("");
+    setIsEditingComment(false);
+  }, [activeDayModal?.dateString]);
 
   // Limpiar timers al desmontar
   useEffect(() => {
@@ -419,7 +425,7 @@ export default function MonthScheduler({
   }, [flushPendingSave]);
 
   // Alternar disponibilidad del jugador actual para una fecha de manera inmediata y fluida
-  const toggleDateAvailability = (dateStr: string) => {
+  const toggleDateAvailability = (dateStr: string, bypassConfirmation: boolean = false) => {
     if (dateStr < todayDateStr) {
       return;
     }
@@ -432,6 +438,20 @@ export default function MonthScheduler({
     const currentAvailability = availabilityRef.current;
     const currentVoters = currentAvailability[dateStr] || [];
     const isCurrentlyAvailable = currentVoters.includes(selectedPlayer);
+
+    // Si el jugador ya está disponible y tiene una nota registrada en esta fecha,
+    // interceptamos con un modal de confirmación antes de desmarcar y eliminar la nota
+    if (isCurrentlyAvailable && !bypassConfirmation) {
+      const currentComments = commentsRef.current || {};
+      const userComment = (currentComments[dateStr] || []).find((c) => c.author === selectedPlayer);
+      if (userComment) {
+        setConfirmUnmarkDate({
+          dateStr,
+          commentText: userComment.text,
+        });
+        return;
+      }
+    }
 
     const updatedVoters = isCurrentlyAvailable
       ? currentVoters.filter((name) => name !== selectedPlayer)
@@ -530,6 +550,7 @@ export default function MonthScheduler({
 
       commentsRef.current = nextComments;
       setPoll((prev) => ({ ...prev, comments: nextComments }));
+      setCommentInput("");
       setIsEditingComment(false);
 
       if (onUpdateComments) {
@@ -1981,6 +2002,66 @@ export default function MonthScheduler({
           >
             <X className="w-3.5 h-3.5" />
           </button>
+        </div>
+      )}
+
+      {/* Modal de confirmación para desmarcar fecha con nota */}
+      {confirmUnmarkDate && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setConfirmUnmarkDate(null);
+            }
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xl animate-in fade-in duration-200 cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-sm liquid-glass-elevated rounded-3xl p-6 shadow-2xl space-y-4 border border-amber-400/30 cursor-default"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto border border-amber-400/30">
+              <MessageSquare className="w-6 h-6" />
+            </div>
+
+            <div className="text-center space-y-1">
+              <h3 className="text-lg font-black text-zinc-100 tracking-tight">
+                {t("scheduler.confirmUnmarkTitle")}
+              </h3>
+              <p className="text-xs text-zinc-400">
+                {formatFriendlyDate(confirmUnmarkDate.dateStr, locale)}
+              </p>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <p className="text-zinc-300 text-center leading-relaxed">
+                {t("scheduler.confirmUnmarkDesc")}
+              </p>
+              <div className="p-3 rounded-2xl bg-black/40 border border-amber-400/20 text-amber-200/90 italic break-words text-center text-xs">
+                &ldquo;{confirmUnmarkDate.commentText}&rdquo;
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmUnmarkDate(null)}
+                className="flex-1 py-2.5 rounded-2xl text-xs font-semibold text-zinc-300 hover:text-white liquid-glass-subtle border border-white/10 transition-all active:scale-95"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const targetDate = confirmUnmarkDate.dateStr;
+                  setConfirmUnmarkDate(null);
+                  toggleDateAvailability(targetDate, true);
+                }}
+                className="flex-1 py-2.5 rounded-2xl text-xs font-black bg-red-500 hover:bg-red-600 text-white shadow-md shadow-red-950/40 transition-all active:scale-95"
+              >
+                {t("scheduler.confirmUnmarkBtn")}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
