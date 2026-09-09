@@ -61,12 +61,36 @@ export default function RootLayout({
   return (
     <html lang="es" className="dark">
       <body className="bg-[#08090d] text-zinc-100 min-h-screen antialiased selection:bg-amber-500 selection:text-zinc-950 relative overflow-x-hidden">
-        {/* Orbes de luz ambiental líquida (detrás del cristal) */}
+        {/* Orbes de luz ambiental líquida de alto rendimiento (renderizado nativo por GPU sin filtros blur) */}
         <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-          <div className="absolute -top-32 -left-20 w-[420px] h-[420px] bg-amber-500/[0.12] rounded-full blur-[130px]" />
-          <div className="absolute top-20 -right-24 w-[480px] h-[480px] bg-indigo-600/[0.14] rounded-full blur-[150px]" />
-          <div className="absolute top-[45%] left-[20%] w-[400px] h-[400px] bg-emerald-500/[0.08] rounded-full blur-[140px]" />
-          <div className="absolute -bottom-24 right-[15%] w-[440px] h-[440px] bg-amber-600/[0.10] rounded-full blur-[140px]" />
+          <div
+            className="absolute -top-32 -left-20 w-[420px] h-[420px] rounded-full"
+            style={{
+              background:
+                "radial-gradient(circle, rgba(245, 158, 11, 0.14) 0%, rgba(245, 158, 11, 0) 70%)",
+            }}
+          />
+          <div
+            className="absolute top-20 -right-24 w-[480px] h-[480px] rounded-full"
+            style={{
+              background:
+                "radial-gradient(circle, rgba(79, 70, 229, 0.16) 0%, rgba(79, 70, 229, 0) 70%)",
+            }}
+          />
+          <div
+            className="absolute top-[45%] left-[20%] w-[400px] h-[400px] rounded-full"
+            style={{
+              background:
+                "radial-gradient(circle, rgba(16, 185, 129, 0.10) 0%, rgba(16, 185, 129, 0) 70%)",
+            }}
+          />
+          <div
+            className="absolute -bottom-24 right-[15%] w-[440px] h-[440px] rounded-full"
+            style={{
+              background:
+                "radial-gradient(circle, rgba(217, 119, 6, 0.12) 0%, rgba(217, 119, 6, 0) 70%)",
+            }}
+          />
         </div>
 
         <LanguageProvider>

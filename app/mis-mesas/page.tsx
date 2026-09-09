@@ -252,7 +252,13 @@ export default function MisMesasPage() {
               >
                 {/* Glow sutil si hay fechas confirmadas */}
                 {confirmedDates.length > 0 && (
-                  <div className="absolute -right-16 -top-16 w-44 h-44 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
+                  <div
+                    className="absolute -right-16 -top-16 w-44 h-44 rounded-full pointer-events-none"
+                    style={{
+                      background:
+                        "radial-gradient(circle, rgba(16, 185, 129, 0.18) 0%, transparent 70%)",
+                    }}
+                  />
                 )}
 
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">

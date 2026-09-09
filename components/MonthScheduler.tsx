@@ -423,7 +423,13 @@ export default function MonthScheduler({
       {/* Barra de Encabezado y Selector de Jugador */}
       <div className="liquid-glass rounded-3xl p-5 sm:p-7 shadow-2xl relative overflow-hidden">
         {/* Glow sutil ambiental */}
-        <div className="absolute -right-20 -top-20 w-64 h-64 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
+        <div
+          className="absolute -right-20 -top-20 w-64 h-64 rounded-full pointer-events-none"
+          style={{
+            background:
+              "radial-gradient(circle, rgba(245, 158, 11, 0.18) 0%, transparent 70%)",
+          }}
+        />
 
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
           <div>
