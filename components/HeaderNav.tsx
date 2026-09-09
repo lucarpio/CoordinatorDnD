@@ -12,8 +12,10 @@ export default function HeaderNav() {
   const pathname = usePathname();
   const { t } = useLanguage();
   const [savedCount, setSavedCount] = useState<number>(0);
+  const [isMounted, setIsMounted] = useState<boolean>(false);
 
   useEffect(() => {
+    setIsMounted(true);
     const updateCount = () => {
       const polls = getSavedPolls();
       setSavedCount(polls.length);
@@ -44,7 +46,7 @@ export default function HeaderNav() {
       >
         <BookmarkCheck className={`w-3.5 h-3.5 ${isMisMesas ? "text-zinc-950" : "text-amber-400"}`} />
         <span>{t("nav.misMesas")}</span>
-        {savedCount > 0 && (
+        {isMounted && savedCount > 0 && (
           <span
             className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
               isMisMesas

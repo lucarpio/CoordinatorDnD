@@ -48,6 +48,16 @@ export default function Home() {
     title: string;
   } | null>(null);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
+  const copyTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  // Limpiar timer al desmontar
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) {
+        clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
 
   // Cargar mesas creadas guardadas localmente
   useEffect(() => {
@@ -202,7 +212,12 @@ export default function Home() {
 
     navigator.clipboard.writeText(text);
     setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 3000);
+    if (copyTimerRef.current) {
+      clearTimeout(copyTimerRef.current);
+    }
+    copyTimerRef.current = setTimeout(() => {
+      setCopiedLink(false);
+    }, 3000);
   };
 
   return (
@@ -227,7 +242,13 @@ export default function Home() {
       {/* Modal / Card de Éxito cuando se crea la sala */}
       {createdRoom ? (
         <div className="liquid-glass-elevated rounded-3xl p-6 sm:p-8 space-y-6 animate-in fade-in zoom-in-95 duration-300 relative overflow-hidden">
-          <div className="absolute -right-16 -top-16 w-48 h-48 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
+          <div
+            className="absolute -right-16 -top-16 w-48 h-48 rounded-full pointer-events-none"
+            style={{
+              background:
+                "radial-gradient(circle, rgba(16, 185, 129, 0.18) 0%, transparent 70%)",
+            }}
+          />
           
           <div className="text-center space-y-2">
             <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-400/30 shadow-[inset_0_1px_1px_rgba(255,255,255,0.25)]">
@@ -286,7 +307,13 @@ export default function Home() {
             className="liquid-glass rounded-3xl p-6 sm:p-8 space-y-6 relative overflow-hidden"
           >
           {/* Sutil resplandor ámbar superior */}
-          <div className="absolute -right-20 -top-20 w-52 h-52 bg-amber-500/[0.08] rounded-full blur-3xl pointer-events-none" />
+          <div
+            className="absolute -right-20 -top-20 w-52 h-52 rounded-full pointer-events-none"
+            style={{
+              background:
+                "radial-gradient(circle, rgba(245, 158, 11, 0.12) 0%, transparent 70%)",
+            }}
+          />
 
           {errorMessage && (
             <div className="p-4 rounded-2xl bg-red-950/40 border border-red-500/40 text-red-200 text-xs sm:text-sm flex items-start gap-3 backdrop-blur-md">

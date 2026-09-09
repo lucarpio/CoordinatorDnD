@@ -15,48 +15,84 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
+interface GuideItemConfig {
+  id: string;
+  icon: React.ComponentType<{ className?: string }>;
+  titleKey: string;
+  descKey: string;
+  color: string;
+}
+
+const GUIDE_ITEMS_CONFIG: GuideItemConfig[] = [
+  {
+    id: "create-room",
+    icon: Users,
+    titleKey: "tutorial.guideItems.item1Title",
+    descKey: "tutorial.guideItems.item1Desc",
+    color: "text-blue-400 bg-blue-500/15 border-blue-400/30",
+  },
+  {
+    id: "claim-character",
+    icon: ShieldCheck,
+    titleKey: "tutorial.guideItems.item2Title",
+    descKey: "tutorial.guideItems.item2Desc",
+    color: "text-amber-400 bg-amber-500/15 border-amber-400/30",
+  },
+  {
+    id: "mark-availability",
+    icon: CalendarCheck,
+    titleKey: "tutorial.guideItems.item3Title",
+    descKey: "tutorial.guideItems.item3Desc",
+    color: "text-purple-400 bg-purple-500/15 border-purple-400/30",
+  },
+  {
+    id: "quorum-export",
+    icon: Share2,
+    titleKey: "tutorial.guideItems.item4Title",
+    descKey: "tutorial.guideItems.item4Desc",
+    color: "text-emerald-400 bg-emerald-500/15 border-emerald-400/30",
+  },
+];
+
 export default function TutorialHelpModal() {
   const { showHelpModal, setShowHelpModal, resetTutorial } = useTutorial();
   const { t } = useLanguage();
   const [resetSuccess, setResetSuccess] = useState<boolean>(false);
+  const timerRef = React.useRef<NodeJS.Timeout | null>(null);
 
-  if (!showHelpModal) return null;
+  // Limpiar timer si el modal se desmonta
+  React.useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, []);
 
-  const handleReset = () => {
+  // Memorizar pasos traducidos para no recalcular en cada render
+  const steps = React.useMemo(() => {
+    return GUIDE_ITEMS_CONFIG.map((item) => ({
+      id: item.id,
+      icon: item.icon,
+      title: t(item.titleKey),
+      desc: t(item.descKey),
+      color: item.color,
+    }));
+  }, [t]);
+
+  const handleReset = React.useCallback(() => {
     resetTutorial();
     setResetSuccess(true);
-    setTimeout(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+    timerRef.current = setTimeout(() => {
       setResetSuccess(false);
       setShowHelpModal(false);
     }, 1200);
-  };
+  }, [resetTutorial, setShowHelpModal]);
 
-  const steps = [
-    {
-      icon: Users,
-      title: t("tutorial.guideItems.item1Title"),
-      desc: t("tutorial.guideItems.item1Desc"),
-      color: "text-blue-400 bg-blue-500/15 border-blue-400/30",
-    },
-    {
-      icon: ShieldCheck,
-      title: t("tutorial.guideItems.item2Title"),
-      desc: t("tutorial.guideItems.item2Desc"),
-      color: "text-amber-400 bg-amber-500/15 border-amber-400/30",
-    },
-    {
-      icon: CalendarCheck,
-      title: t("tutorial.guideItems.item3Title"),
-      desc: t("tutorial.guideItems.item3Desc"),
-      color: "text-purple-400 bg-purple-500/15 border-purple-400/30",
-    },
-    {
-      icon: Share2,
-      title: t("tutorial.guideItems.item4Title"),
-      desc: t("tutorial.guideItems.item4Desc"),
-      color: "text-emerald-400 bg-emerald-500/15 border-emerald-400/30",
-    },
-  ];
+  if (!showHelpModal) return null;
 
   return (
     <div
@@ -101,11 +137,11 @@ export default function TutorialHelpModal() {
 
         {/* Pasos Guía */}
         <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
-          {steps.map((step, idx) => {
+          {steps.map((step) => {
             const Icon = step.icon;
             return (
               <div
-                key={idx}
+                key={step.id}
                 className="flex items-start gap-3.5 p-3.5 rounded-2xl liquid-glass-subtle border border-white/10"
               >
                 <div className={`p-2 rounded-xl border flex-shrink-0 ${step.color}`}>
