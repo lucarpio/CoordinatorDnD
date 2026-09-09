@@ -14,9 +14,15 @@ create table if not exists public.polls (
   -- availability almacena un objeto jsonb mapeando fecha -> array de nombres
   -- Ejemplo: { "2026-09-15": ["Lucas (DM)", "Carlos"], "2026-09-22": ["Lucas (DM)", "Carlos", "Valeria", "Andrés"] }
   availability jsonb not null default '{}'::jsonb,
+  -- comments almacena un objeto jsonb mapeando fecha -> array de comentarios/notas
+  -- Ejemplo: { "2026-09-15": [{ "id": "1", "author": "Carlos", "text": "Llego 9:00 PM", "createdAt": "..." }] }
+  comments jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default timezone('utc'::text, now()),
   updated_at timestamptz not null default timezone('utc'::text, now())
 );
+
+-- Para bases de datos existentes, agregar la columna comments si no existe:
+alter table public.polls add column if not exists comments jsonb not null default '{}'::jsonb;
 
 -- 2. Índices para acelerar búsquedas
 create index if not exists idx_polls_slug on public.polls(slug);

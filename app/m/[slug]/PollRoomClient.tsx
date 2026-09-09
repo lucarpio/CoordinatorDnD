@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { supabase, Poll, AvailabilityMap } from "@/lib/supabase";
+import { supabase, Poll, AvailabilityMap, DateCommentsMap } from "@/lib/supabase";
 import MonthScheduler from "@/components/MonthScheduler";
 import { AlertCircle, ArrowLeft, Loader2 } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
@@ -87,14 +87,24 @@ export default function PollRoomClient({ slug }: PollRoomClientProps) {
     };
   }, [slug]);
 
-  // Actualizar disponibilidad en Supabase
-  const handleUpdateAvailability = async (newAvailability: AvailabilityMap): Promise<boolean> => {
+  // Actualizar disponibilidad y comentarios en Supabase
+  const handleUpdateAvailability = async (
+    newAvailability: AvailabilityMap,
+    newComments?: DateCommentsMap
+  ): Promise<boolean> => {
     if (!slug) return false;
 
     try {
+      const payload: { availability: AvailabilityMap; comments?: DateCommentsMap } = {
+        availability: newAvailability,
+      };
+      if (newComments !== undefined) {
+        payload.comments = newComments;
+      }
+
       const { error: updateError } = await supabase
         .from("polls")
-        .update({ availability: newAvailability })
+        .update(payload)
         .eq("slug", slug);
 
       if (updateError) {
@@ -104,6 +114,27 @@ export default function PollRoomClient({ slug }: PollRoomClientProps) {
       return true;
     } catch (err) {
       console.error("Error updating availability:", err);
+      return false;
+    }
+  };
+
+  // Actualizar comentarios de fechas en Supabase
+  const handleUpdateComments = async (newComments: DateCommentsMap): Promise<boolean> => {
+    if (!slug) return false;
+
+    try {
+      const { error: updateError } = await supabase
+        .from("polls")
+        .update({ comments: newComments })
+        .eq("slug", slug);
+
+      if (updateError) {
+        console.error("Error updating comments:", updateError);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.error("Error updating comments:", err);
       return false;
     }
   };
@@ -162,6 +193,7 @@ export default function PollRoomClient({ slug }: PollRoomClientProps) {
       <MonthScheduler
         initialPoll={poll}
         onUpdateAvailability={handleUpdateAvailability}
+        onUpdateComments={handleUpdateComments}
         isRealtimeConnected={isRealtimeConnected}
       />
     </div>
