@@ -154,6 +154,7 @@
     "close": "Close",
     "save": "Save",
     "delete": "Delete",
+    "cancel": "Cancel",
     "copy": "Copy",
     "copied": "Copied!"
   },
