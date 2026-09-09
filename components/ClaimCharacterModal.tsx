@@ -36,13 +36,13 @@ export default function ClaimCharacterModal({
 }: ClaimCharacterModalProps) {
   const { t, locale } = useLanguage();
 
-  const handleDismiss = () => {
+  const handleDismiss = React.useCallback(() => {
     if (canDismiss) {
       onClose();
     } else {
       onEnterAsSpectator();
     }
-  };
+  }, [canDismiss, onClose, onEnterAsSpectator]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -55,7 +55,7 @@ export default function ClaimCharacterModal({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isOpen, canDismiss, onClose, onEnterAsSpectator]);
+  }, [isOpen, handleDismiss]);
 
   if (!isOpen) return null;
 
@@ -76,7 +76,13 @@ export default function ClaimCharacterModal({
         <div className="w-10 h-1 bg-white/25 rounded-full mx-auto -mt-1 mb-2" />
 
         {/* Glow de fondo */}
-        <div className="absolute -right-20 -top-20 w-52 h-52 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
+        <div
+          className="absolute -right-20 -top-20 w-52 h-52 rounded-full pointer-events-none"
+          style={{
+            background:
+              "radial-gradient(circle, rgba(245, 158, 11, 0.18) 0%, transparent 70%)",
+          }}
+        />
 
         {/* Botón de cerrar */}
         <button
