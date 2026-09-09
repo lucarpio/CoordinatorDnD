@@ -67,6 +67,10 @@ export default function ClaimCharacterModal({
         }
       }}
       className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/65 backdrop-blur-xl animate-in fade-in duration-200 cursor-pointer"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="claim-modal-title"
+      data-testid="claim-character-modal"
     >
       <div
         onClick={(e) => e.stopPropagation()}
@@ -89,6 +93,8 @@ export default function ClaimCharacterModal({
           onClick={handleDismiss}
           className="absolute top-5 right-5 p-2 text-zinc-400 hover:text-white hover:bg-white/10 rounded-2xl transition-all"
           title={t("common.close")}
+          aria-label={t("common.close")}
+          data-testid="claim-modal-close-btn"
         >
           <X className="w-5 h-5" />
         </button>
@@ -99,7 +105,7 @@ export default function ClaimCharacterModal({
             <Shield className="w-3.5 h-3.5 text-amber-400" />
             {locale === "en" ? "Table Access" : "Acceso a la Mesa"}
           </div>
-          <h2 className="text-xl sm:text-2xl font-black text-zinc-100 tracking-tight">
+          <h2 id="claim-modal-title" className="text-xl sm:text-2xl font-black text-zinc-100 tracking-tight">
             {t("claimModal.title")}
           </h2>
           <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
@@ -123,6 +129,8 @@ export default function ClaimCharacterModal({
                 key={name}
                 type="button"
                 onClick={() => onSelectPlayer(name)}
+                data-testid={`claim-player-btn-${name.toLowerCase().replace(/\s+/g, "-")}`}
+                aria-label={`${locale === "en" ? "Select player" : "Seleccionar jugador"} ${name}`}
                 className={`w-full text-left p-3.5 rounded-2xl border transition-all flex items-center justify-between group active:scale-[0.98] ${
                   isCurrent
                     ? "bg-amber-500/20 border-amber-400/60 shadow-lg shadow-amber-500/15"
@@ -189,6 +197,8 @@ export default function ClaimCharacterModal({
           <button
             type="button"
             onClick={onEnterAsSpectator}
+            data-testid="claim-spectator-btn"
+            aria-label={locale === "en" ? "View calendar only (Spectator / DM mode)" : "Solo ver calendario (Modo espectador / Master)"}
             className="w-full sm:w-auto text-zinc-400 hover:text-amber-300 flex items-center justify-center gap-1.5 py-2 px-3 rounded-2xl hover:bg-white/[0.06] transition-colors active:scale-95"
           >
             <Eye className="w-4 h-4" />
@@ -203,6 +213,8 @@ export default function ClaimCharacterModal({
             <button
               type="button"
               onClick={onClose}
+              data-testid="claim-keep-current-btn"
+              aria-label={locale === "en" ? "Keep current character" : "Mantener personaje actual"}
               className="w-full sm:w-auto px-4 py-2 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-200 font-bold rounded-2xl transition-colors border border-white/15 active:scale-95"
             >
               {locale === "en" ? "Keep current" : "Mantener actual"}

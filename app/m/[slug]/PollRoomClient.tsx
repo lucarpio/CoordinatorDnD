@@ -169,6 +169,8 @@ export default function PollRoomClient({ slug }: PollRoomClientProps) {
         </p>
         <button
           onClick={() => router.push("/")}
+          data-testid="error-back-home-btn"
+          aria-label={t("common.back")}
           className="inline-flex items-center gap-2 px-5 py-2.5 ios-btn-amber text-zinc-950 rounded-2xl text-xs font-black transition-all active:scale-95 shadow-md"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
@@ -183,6 +185,8 @@ export default function PollRoomClient({ slug }: PollRoomClientProps) {
       <div className="flex items-center justify-between">
         <button
           onClick={() => router.push("/")}
+          data-testid="room-new-poll-btn"
+          aria-label={t("nav.newPoll")}
           className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-2xl text-xs font-semibold text-zinc-300 hover:text-white liquid-glass-subtle border border-white/10 transition-all active:scale-95"
         >
           <ArrowLeft className="w-3.5 h-3.5 text-amber-400" />

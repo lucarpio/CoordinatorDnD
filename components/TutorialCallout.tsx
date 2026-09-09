@@ -103,6 +103,8 @@ export default function TutorialCallout({
               onClick={() => completeStep(stepId)}
               className="p-1 text-zinc-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
               title={t("common.close")}
+              aria-label={t("common.close")}
+              data-testid="tutorial-callout-close-btn"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -123,6 +125,8 @@ export default function TutorialCallout({
             <button
               type="button"
               onClick={dismissAll}
+              data-testid="tutorial-callout-dismiss-btn"
+              aria-label={t("tutorial.dismiss")}
               className="text-[11px] font-semibold text-zinc-500 hover:text-zinc-300 transition-colors underline-offset-2 hover:underline"
             >
               {t("tutorial.dismiss")}
@@ -131,6 +135,8 @@ export default function TutorialCallout({
             <button
               type="button"
               onClick={handleGotIt}
+              data-testid="tutorial-callout-got-it-btn"
+              aria-label={t("tutorial.gotIt")}
               className="ios-btn-amber text-zinc-950 font-black text-xs px-4 py-1.5 rounded-xl flex items-center gap-1.5 shadow-md shadow-amber-500/20 active:scale-95 transition-all"
             >
               <span>{t("tutorial.gotIt")}</span>

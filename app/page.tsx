@@ -277,6 +277,8 @@ export default function Home() {
           <div className="flex flex-col sm:flex-row gap-3 pt-1">
             <button
               onClick={handleCopyWhatsAppLink}
+              data-testid="copy-share-url-btn"
+              aria-label={copiedLink ? t("home.copied") : t("home.copyLink")}
               className="flex-1 px-4 py-3.5 ios-btn-emerald text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
             >
               <Copy className="w-4 h-4" />
@@ -284,6 +286,8 @@ export default function Home() {
             </button>
             <button
               onClick={() => router.push(`/m/${createdRoom.slug}`)}
+              data-testid="go-to-created-room-btn"
+              aria-label={t("home.goToRoom")}
               className="px-6 py-3.5 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-100 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] border border-white/15"
             >
               {t("home.goToRoom")}
@@ -324,10 +328,13 @@ export default function Home() {
 
           {/* Título de la campaña */}
           <div className="space-y-2">
-            <label className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+            <label htmlFor="campaign-title-input" className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
               {t("home.campaignName")}
             </label>
             <input
+              id="campaign-title-input"
+              data-testid="campaign-title-input"
+              aria-label={t("home.campaignName")}
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -343,11 +350,14 @@ export default function Home() {
           {/* Mes y Año */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+              <label htmlFor="campaign-month-select" className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5 text-amber-400" />
                 {t("home.monthLabel")}
               </label>
               <select
+                id="campaign-month-select"
+                data-testid="campaign-month-select"
+                aria-label={t("home.monthLabel")}
                 value={month}
                 onChange={(e) => setMonth(Number(e.target.value))}
                 className="w-full liquid-glass-input rounded-2xl px-4 py-3 text-sm text-zinc-100 cursor-pointer"
@@ -361,10 +371,13 @@ export default function Home() {
             </div>
 
             <div className="space-y-2">
-              <label className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+              <label htmlFor="campaign-year-select" className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
                 {t("home.yearLabel")}
               </label>
               <select
+                id="campaign-year-select"
+                data-testid="campaign-year-select"
+                aria-label={t("home.yearLabel")}
                 value={year}
                 onChange={(e) => setYear(Number(e.target.value))}
                 className="w-full liquid-glass-input rounded-2xl px-4 py-3 text-sm text-zinc-100 cursor-pointer"
@@ -380,7 +393,7 @@ export default function Home() {
 
           {/* Participantes */}
           <div className="space-y-3">
-            <label className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
+            <label htmlFor="participant-input" className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
               <span className="flex items-center gap-1.5">
                 <Users className="w-3.5 h-3.5 text-amber-400" />
                 {t("home.participantsLabel")} ({participants.length})
@@ -392,6 +405,9 @@ export default function Home() {
 
             <div className="flex gap-2">
               <input
+                id="participant-input"
+                data-testid="participant-input"
+                aria-label={t("home.participantsLabel")}
                 type="text"
                 value={participantInput}
                 onChange={(e) => setParticipantInput(e.target.value)}
@@ -402,6 +418,8 @@ export default function Home() {
               <button
                 type="button"
                 onClick={handleAddParticipant}
+                data-testid="add-participant-btn"
+                aria-label={t("home.addBtn")}
                 className="px-4 py-2.5 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-200 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all border border-white/10 active:scale-95"
               >
                 <Plus className="w-4 h-4" />
@@ -425,6 +443,8 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={() => handleRemoveParticipant(name)}
+                      data-testid={`remove-participant-${name.toLowerCase().replace(/\s+/g, "-")}`}
+                      aria-label={`${locale === "en" ? "Remove" : "Eliminar"} ${name}`}
                       className="text-zinc-400 hover:text-red-400 transition-colors p-0.5"
                     >
                       <X className="w-3.5 h-3.5" />
@@ -439,6 +459,8 @@ export default function Home() {
             <button
               type="submit"
               disabled={isLoading}
+              data-testid="create-poll-submit-btn"
+              aria-label={isLoading ? t("home.creatingBtn") : t("home.submitBtn")}
               className="w-full py-4 ios-btn-amber text-zinc-950 font-black text-sm uppercase tracking-wider rounded-2xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98]"
             >
               <Dices className="w-5 h-5" />

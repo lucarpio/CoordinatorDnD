@@ -15,6 +15,7 @@ export default function LanguageSelector() {
       <button
         type="button"
         onClick={() => setLocale("es")}
+        data-testid="lang-es-btn"
         className={`px-2 py-1 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 ${
           locale === "es"
             ? "ios-segmented-active"
@@ -27,6 +28,7 @@ export default function LanguageSelector() {
       <button
         type="button"
         onClick={() => setLocale("en")}
+        data-testid="lang-en-btn"
         className={`px-2 py-1 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 ${
           locale === "en"
             ? "ios-segmented-active"
