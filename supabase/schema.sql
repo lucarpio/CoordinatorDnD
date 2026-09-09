@@ -21,8 +21,11 @@ create table if not exists public.polls (
   updated_at timestamptz not null default timezone('utc'::text, now())
 );
 
--- Para bases de datos existentes, agregar la columna comments si no existe:
+-- Para bases de datos existentes, agregar columnas si no existen:
 alter table public.polls add column if not exists comments jsonb not null default '{}'::jsonb;
+alter table public.polls add column if not exists time_mode text not null default 'single';
+alter table public.polls add column if not exists time_slots jsonb not null default '[]'::jsonb;
+alter table public.polls add column if not exists default_time text not null default '20:30';
 
 -- 2. Índices para acelerar búsquedas
 create index if not exists idx_polls_slug on public.polls(slug);

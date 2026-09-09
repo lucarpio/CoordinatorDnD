@@ -15,8 +15,9 @@ import {
   Plus,
   X,
   BookmarkCheck,
+  Clock,
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { supabase, TimeMode, SlotId } from "@/lib/supabase";
 import { MONTH_NAMES } from "@/lib/calendarUtils";
 import { saveCreatedPoll, getSavedPolls, SavedPoll } from "@/lib/storage";
 import { useLanguage } from "@/context/LanguageContext";
@@ -40,6 +41,20 @@ export default function Home() {
   const [participantInput, setParticipantInput] = useState<string>("");
   const [participants, setParticipants] = useState<string[]>([]);
   const [savedPolls, setSavedPolls] = useState<SavedPoll[]>([]);
+  const [timeMode, setTimeMode] = useState<TimeMode>("single");
+  const [defaultTime, setDefaultTime] = useState<string>("20:30");
+  const [selectedSlots, setSelectedSlots] = useState<SlotId[]>(["afternoon", "night"]);
+
+  const toggleSlotSelection = (slot: SlotId) => {
+    if (selectedSlots.includes(slot)) {
+      if (selectedSlots.length === 1) {
+        return; // Mantener al menos 1 franja seleccionada
+      }
+      setSelectedSlots(selectedSlots.filter((s) => s !== slot));
+    } else {
+      setSelectedSlots([...selectedSlots, slot]);
+    }
+  };
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
@@ -151,6 +166,11 @@ export default function Home() {
       return;
     }
 
+    if (timeMode === "slots" && selectedSlots.length === 0) {
+      setErrorMessage(t("home.errorAtLeastOneSlot"));
+      return;
+    }
+
     completeStep("home_create");
     setIsLoading(true);
 
@@ -166,6 +186,9 @@ export default function Home() {
           month,
           participants,
           availability: {},
+          time_mode: timeMode,
+          time_slots: timeMode === "slots" ? selectedSlots : [],
+          default_time: defaultTime.trim() || "20:30",
         })
         .select()
         .single();
@@ -451,6 +474,97 @@ export default function Home() {
                     </button>
                   </span>
                 ))}
+              </div>
+            )}
+          </div>
+
+          {/* Modalidad de Horario (Horario Único vs Franjas) */}
+          <div className="space-y-3 pt-2 border-t border-white/[0.08]">
+            <label className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-amber-400" />
+              {t("home.scheduleModeTitle")}
+            </label>
+
+            {/* Segmented Control iOS */}
+            <div className="grid grid-cols-2 gap-1.5 p-1 rounded-2xl ios-segmented-control">
+              <button
+                type="button"
+                onClick={() => setTimeMode("single")}
+                data-testid="schedule-mode-single-btn"
+                className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-2 ${
+                  timeMode === "single"
+                    ? "ios-segmented-active"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <span>{t("home.scheduleModeSingle")}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTimeMode("slots")}
+                data-testid="schedule-mode-slots-btn"
+                className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-2 ${
+                  timeMode === "slots"
+                    ? "ios-segmented-active"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <span>{t("home.scheduleModeSlots")}</span>
+              </button>
+            </div>
+
+            {/* Contenido según el modo */}
+            {timeMode === "single" ? (
+              <div className="space-y-1.5 pt-1">
+                <label
+                  htmlFor="default-time-input"
+                  className="block text-[11px] text-zinc-400 font-medium"
+                >
+                  {t("home.scheduleSingleTimeLabel")}
+                </label>
+                <input
+                  id="default-time-input"
+                  data-testid="default-time-input"
+                  type="time"
+                  value={defaultTime}
+                  onChange={(e) => setDefaultTime(e.target.value)}
+                  className="w-full sm:w-48 liquid-glass-input rounded-2xl px-4 py-2.5 text-sm text-zinc-100"
+                />
+              </div>
+            ) : (
+              <div className="space-y-2 pt-1">
+                <span className="block text-[11px] text-zinc-400 font-medium">
+                  {t("home.scheduleSlotsSelectLabel")}
+                </span>
+                {/* Píldoras interactivas estilo iOS Chips */}
+                <div className="flex flex-wrap gap-2.5">
+                  {(
+                    [
+                      { id: "morning" as const, label: t("home.slotMorning") },
+                      { id: "afternoon" as const, label: t("home.slotAfternoon") },
+                      { id: "night" as const, label: t("home.slotNight") },
+                    ]
+                  ).map((slot) => {
+                    const isSelected = selectedSlots.includes(slot.id);
+                    return (
+                      <button
+                        key={slot.id}
+                        type="button"
+                        onClick={() => toggleSlotSelection(slot.id)}
+                        data-testid={`slot-pill-${slot.id}`}
+                        aria-pressed={isSelected}
+                        className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all flex items-center gap-2 border active:scale-95 shadow-sm ${
+                          isSelected
+                            ? "bg-amber-500/25 border-amber-400/60 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.2)]"
+                            : "liquid-glass-subtle border-white/10 text-zinc-400 hover:text-zinc-200 hover:border-white/20 opacity-60"
+                        }`}
+                      >
+                        <span>{slot.label}</span>
+                        {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
