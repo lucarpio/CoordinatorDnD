@@ -187,7 +187,10 @@ export default function Home() {
           participants,
           availability: {},
           time_mode: timeMode,
-          time_slots: timeMode === "slots" ? selectedSlots : [],
+          time_slots:
+            timeMode === "slots"
+              ? (["morning", "afternoon", "night"] as SlotId[]).filter((s) => selectedSlots.includes(s))
+              : [],
           default_time: defaultTime.trim() || "20:30",
         })
         .select()

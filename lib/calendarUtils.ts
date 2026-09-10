@@ -154,6 +154,16 @@ export function formatSlotLabel(slotId: SlotId, locale: SupportedLocale = "es"):
 }
 
 /**
+ * Solo el icono emoji representativo de una franja horaria.
+ */
+export function formatSlotIcon(slotId: SlotId): string {
+  if (slotId === "morning") return "🌅";
+  if (slotId === "afternoon") return "☀️";
+  if (slotId === "night") return "🌙";
+  return "⏰";
+}
+
+/**
  * Nombre corto sin icono para una franja horaria.
  */
 export function formatSlotShortLabel(slotId: SlotId, locale: SupportedLocale = "es"): string {

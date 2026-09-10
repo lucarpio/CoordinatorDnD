@@ -46,6 +46,7 @@ import {
   decodeAvailabilityKey,
   formatSlotLabel,
   formatSlotShortLabel,
+  formatSlotIcon,
   CalendarDay,
   SupportedLocale,
 } from "@/lib/calendarUtils";
@@ -114,9 +115,11 @@ export default function MonthScheduler({
   const isSlotsMode = poll.time_mode === "slots";
   const activeSlots: SlotId[] = useMemo(() => {
     if (!isSlotsMode) return [];
-    return poll.time_slots && poll.time_slots.length > 0
+    const canonicalOrder: SlotId[] = ["morning", "afternoon", "night"];
+    const rawSlots = poll.time_slots && poll.time_slots.length > 0
       ? poll.time_slots
-      : ["morning", "afternoon", "night"];
+      : canonicalOrder;
+    return canonicalOrder.filter((s) => rawSlots.includes(s));
   }, [isSlotsMode, poll.time_slots]);
 
   // En dispositivos móviles (pantallas < 640px), activar por defecto la vista Lista/Agenda
@@ -169,6 +172,52 @@ export default function MonthScheduler({
   const isSavingRef = useRef<boolean>(false);
   const pendingSaveRef = useRef<{ availability: AvailabilityMap; comments?: DateCommentsMap } | null>(null);
   const selectedPlayerRef = useRef<string>(selectedPlayer);
+
+  const hoverLeaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleCellMouseEnter = useCallback((day: CalendarDay) => {
+    if (hoverLeaveTimeoutRef.current) {
+      clearTimeout(hoverLeaveTimeoutRef.current);
+      hoverLeaveTimeoutRef.current = null;
+    }
+    setHoveredDay(day);
+  }, []);
+
+  const handleCellMouseLeave = useCallback(() => {
+    if (hoverLeaveTimeoutRef.current) {
+      clearTimeout(hoverLeaveTimeoutRef.current);
+    }
+    hoverLeaveTimeoutRef.current = setTimeout(() => {
+      setHoveredDay(null);
+      hoverLeaveTimeoutRef.current = null;
+    }, 180);
+  }, []);
+
+  const handleTooltipMouseEnter = useCallback(() => {
+    if (hoverLeaveTimeoutRef.current) {
+      clearTimeout(hoverLeaveTimeoutRef.current);
+      hoverLeaveTimeoutRef.current = null;
+    }
+  }, []);
+
+  const handleTooltipMouseLeave = useCallback(() => {
+    if (hoverLeaveTimeoutRef.current) {
+      clearTimeout(hoverLeaveTimeoutRef.current);
+    }
+    hoverLeaveTimeoutRef.current = setTimeout(() => {
+      setHoveredDay(null);
+      hoverLeaveTimeoutRef.current = null;
+    }, 180);
+  }, []);
+
+  // Limpiar timer de hover al desmontar
+  useEffect(() => {
+    return () => {
+      if (hoverLeaveTimeoutRef.current) {
+        clearTimeout(hoverLeaveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Estados para notas y comentarios
   const [quickNoteDate, setQuickNoteDate] = useState<string | null>(null);
@@ -1297,20 +1346,22 @@ export default function MonthScheduler({
                             const dateNotes = (poll.comments && poll.comments[dateKey]) || [];
                             if (dateNotes.length === 0) return null;
                             return (
-                              <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-white/[0.04]">
+                              <div className="flex flex-col gap-1.5 pt-1.5 border-t border-white/[0.04] w-full max-w-full">
                                 <span className="inline-flex items-center gap-1 text-[10px] text-amber-400 font-bold uppercase tracking-wider">
                                   <MessageSquare className="w-3 h-3" />
                                   <span>{t("scheduler.dateNotesTitle")}:</span>
                                 </span>
-                                {dateNotes.map((note) => (
-                                  <span
-                                    key={note.id}
-                                    className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] px-2.5 py-0.5 rounded-xl bg-amber-500/10 border border-amber-400/20 text-zinc-200"
-                                  >
-                                    <strong className="text-amber-300 font-bold">{note.author}:</strong>
-                                    <span>&ldquo;{note.text}&rdquo;</span>
-                                  </span>
-                                ))}
+                                <div className="flex flex-col gap-1 w-full">
+                                  {dateNotes.map((note) => (
+                                    <div
+                                      key={note.id}
+                                      className="inline-flex flex-wrap items-baseline gap-1 text-[10px] sm:text-[11px] px-2.5 py-1 rounded-xl bg-amber-500/10 border border-amber-400/20 text-zinc-200 break-words [word-break:break-word] w-full"
+                                    >
+                                      <strong className="text-amber-300 font-bold shrink-0">{note.author}:</strong>
+                                      <span className="italic break-words [word-break:break-word]">&ldquo;{note.text}&rdquo;</span>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
                             );
                           })()}
@@ -1321,12 +1372,14 @@ export default function MonthScheduler({
                       <div className="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-white/[0.08] justify-end flex-shrink-0">
                         {selectedPlayer ? (
                           isSlotsMode ? (
-                            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                            <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto justify-between sm:justify-end overflow-x-auto no-scrollbar py-0.5">
                               {activeSlots.map((slotId) => {
                                 const slotKey = encodeAvailabilityKey(dateKey, slotId);
                                 const slotVoters = poll.availability[slotKey] || [];
                                 const isSlotQuorum = slotVoters.length >= totalParticipants && totalParticipants > 0;
                                 const isPlayerInSlot = slotVoters.includes(selectedPlayer);
+                                const icon = formatSlotIcon(slotId);
+                                const shortLabel = formatSlotShortLabel(slotId, locale);
 
                                 return (
                                   <button
@@ -1335,7 +1388,7 @@ export default function MonthScheduler({
                                     onClick={() => toggleDateAvailability(dateKey, false, slotId)}
                                     data-testid={`agenda-toggle-btn-${dateKey}-${slotId}`}
                                     aria-label={`${formatSlotLabel(slotId, locale)} ${formatFriendlyDate(dateKey, locale)}`}
-                                    className={`min-h-[44px] px-3.5 py-2 rounded-2xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 active:scale-95 border ${
+                                    className={`flex-1 sm:flex-initial min-h-[42px] px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-2xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1 sm:gap-1.5 active:scale-95 border shrink-0 ${
                                       isSlotQuorum
                                         ? "bg-emerald-500/25 text-emerald-300 border-emerald-400/50 shadow-emerald-950/20"
                                         : isPlayerInSlot
@@ -1343,12 +1396,13 @@ export default function MonthScheduler({
                                         : "liquid-glass-subtle text-zinc-300 hover:text-white border-white/15"
                                     }`}
                                   >
-                                    <span>{formatSlotLabel(slotId, locale)}</span>
+                                    <span className="text-xs">{icon}</span>
+                                    <span className="hidden xs:inline">{shortLabel}</span>
                                     <span className="text-[10px] opacity-75 font-semibold">
                                       ({slotVoters.length}/{totalParticipants})
                                     </span>
                                     {isSlotQuorum && <span>★</span>}
-                                    {isPlayerInSlot && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                                    {isPlayerInSlot && <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5 stroke-[3]" />}
                                   </button>
                                 );
                               })}
@@ -1361,10 +1415,10 @@ export default function MonthScheduler({
                                   title={t("scheduler.addNoteBtn")}
                                   data-testid={`agenda-note-btn-${dateKey}`}
                                   aria-label={`${t("scheduler.addNoteBtn")} ${formatFriendlyDate(dateKey, locale)}`}
-                                  className="min-h-[44px] px-3.5 py-2 liquid-glass-subtle hover:bg-white/[0.12] text-amber-300 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border border-amber-400/30 active:scale-95 shadow-sm"
+                                  className="min-h-[42px] px-2.5 sm:px-3.5 py-1.5 sm:py-2 liquid-glass-subtle hover:bg-white/[0.12] text-amber-300 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border border-amber-400/30 active:scale-95 shadow-sm shrink-0"
                                 >
                                   <MessageSquare className="w-4 h-4" />
-                                  <span className="hidden sm:inline">{t("scheduler.addNoteBtn")}</span>
+                                  <span className="hidden md:inline">{t("scheduler.addNoteBtn")}</span>
                                 </button>
                               )}
                             </div>
@@ -1524,8 +1578,8 @@ export default function MonthScheduler({
                     key={dateKey}
                     data-testid={`day-cell-${dateKey}`}
                     onClick={handleCellClick}
-                    onMouseEnter={() => setHoveredDay(cellDay)}
-                    onMouseLeave={() => setHoveredDay(null)}
+                    onMouseEnter={() => handleCellMouseEnter(cellDay)}
+                    onMouseLeave={handleCellMouseLeave}
                     title={
                       isPastDate
                         ? t("scheduler.pastDateTitle")
@@ -1607,32 +1661,60 @@ export default function MonthScheduler({
                       )}
                     </div>
 
-                    {/* Badge central: Si es slots mode, mostrar mini badges de cada franja activa. Si es single mode, badge tradicional */}
+                    {/* Badge central: Si es slots mode, mostrar mini badges compactos con iconos y botón de notas si existen. Si es single mode, badge tradicional */}
                     {isSlotsMode ? (
-                      <div className="my-auto py-1 flex flex-col gap-1 w-full">
-                        {slotSummaryList.map((slot) => {
-                          const slotShort = formatSlotShortLabel(slot.id, locale);
+                      <div className="my-auto py-1 flex flex-col items-center gap-1.5 w-full">
+                        <div className="flex items-center justify-center gap-1 flex-wrap w-full">
+                          {slotSummaryList.map((slot) => {
+                            const icon = formatSlotIcon(slot.id);
+                            return (
+                              <div
+                                key={slot.id}
+                                title={`${formatSlotLabel(slot.id, locale)}: ${slot.count}/${totalParticipants}${slot.isQuorum ? " ★" : ""}`}
+                                className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-lg text-[10px] font-bold border transition-colors ${
+                                  slot.isQuorum
+                                    ? "bg-emerald-500/25 border-emerald-400/60 text-emerald-200 shadow-sm shadow-emerald-500/20"
+                                    : slot.isVoted
+                                    ? "bg-amber-500/20 border-amber-400/50 text-amber-200"
+                                    : slot.count > 0
+                                    ? "bg-white/[0.08] border-white/15 text-zinc-300"
+                                    : "bg-black/20 border-white/[0.04] text-zinc-500"
+                                }`}
+                              >
+                                <span className="text-xs leading-none">{icon}</span>
+                                <span className="font-mono text-[9px] font-bold leading-none">
+                                  {slot.count}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Badge indicador de notas en modo franjas */}
+                        {(() => {
+                          const dateNotes = (poll.comments && poll.comments[dateKey]) || [];
+                          if (dateNotes.length === 0) return null;
                           return (
-                            <div
-                              key={slot.id}
-                              className={`flex items-center justify-between px-1.5 py-0.5 rounded-lg text-[9px] sm:text-[10px] font-bold border transition-colors ${
-                                slot.isQuorum
-                                  ? "bg-emerald-500/25 border-emerald-400/60 text-emerald-200"
-                                  : slot.isVoted
-                                  ? "bg-amber-500/20 border-amber-400/50 text-amber-200"
-                                  : slot.count > 0
-                                  ? "bg-white/[0.07] border-white/15 text-zinc-300"
-                                  : "bg-black/20 border-white/[0.04] text-zinc-500"
-                              }`}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveDayModal(cellDay);
+                              }}
+                              title={
+                                locale === "en"
+                                  ? `${dateNotes.length} note(s) on this date`
+                                  : `${dateNotes.length} nota(s) en esta fecha`
+                              }
+                              aria-label={`${locale === "en" ? "View notes for" : "Ver notas de"} ${formatFriendlyDate(dateKey, locale)}`}
+                              data-testid={`notes-btn-${dateKey}`}
+                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-300 text-[9px] font-bold transition-transform hover:scale-105 active:scale-95 shadow-sm"
                             >
-                              <span className="truncate">{slotShort}</span>
-                              <span className="font-mono text-[9px]">
-                                {slot.isQuorum ? "★ " : ""}
-                                {slot.count}/{totalParticipants}
-                              </span>
-                            </div>
+                              <MessageSquare className="w-2.5 h-2.5" />
+                              <span>{dateNotes.length}</span>
+                            </button>
                           );
-                        })}
+                        })()}
                       </div>
                     ) : (
                       <div className="my-auto py-0.5 sm:py-1 flex items-center justify-center gap-1 flex-wrap">
@@ -1728,8 +1810,14 @@ export default function MonthScheduler({
                     {/* Tooltip flotante al pasar el cursor */}
                     {hoveredDay?.dateString === dateKey && (
                       <div
-                        className={`absolute bottom-full ${tooltipPositionClass} mb-2.5 z-50 w-60 sm:w-64 p-3.5 bg-[#0c0e14]/95 backdrop-blur-2xl rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.85)] pointer-events-none text-left hidden sm:block border border-white/20`}
+                        onMouseEnter={handleTooltipMouseEnter}
+                        onMouseLeave={handleTooltipMouseLeave}
+                        onClick={(e) => e.stopPropagation()}
+                        className={`absolute bottom-full ${tooltipPositionClass} mb-2 z-50 w-60 sm:w-64 p-3.5 bg-[#0c0e14]/95 backdrop-blur-2xl rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.85)] pointer-events-auto text-left hidden sm:block border border-white/20`}
                       >
+                        {/* Puente invisible para evitar perder el hover al cruzar el margen */}
+                        <div className="absolute -bottom-3 left-0 right-0 h-3" />
+
                         {/* Flecha indicadora apuntando a la celda */}
                         <div
                           className={`absolute -bottom-1.5 ${arrowPositionClass} w-3 h-3 bg-[#0c0e14] border-r border-b border-white/20 rotate-45 pointer-events-none`}
@@ -1861,9 +1949,9 @@ export default function MonthScheduler({
                                 </div>
                                 <div className="space-y-1 max-h-24 overflow-y-auto">
                                   {dateNotes.map((note) => (
-                                    <div key={note.id} className="text-[11px] bg-white/5 rounded-lg p-1.5 border border-white/10">
+                                    <div key={note.id} className="text-[11px] bg-white/5 rounded-lg p-1.5 border border-white/10 break-words [word-break:break-word]">
                                       <span className="font-bold text-amber-300">{note.author}: </span>
-                                      <span className="text-zinc-200">&ldquo;{note.text}&rdquo;</span>
+                                      <span className="text-zinc-200 break-words [word-break:break-word]">&ldquo;{note.text}&rdquo;</span>
                                     </div>
                                   ))}
                                 </div>
@@ -2293,7 +2381,7 @@ export default function MonthScheduler({
                                       )}
                                     </div>
                                   </div>
-                                  <p className="text-zinc-200 text-xs leading-relaxed break-words font-medium">
+                                  <p className="text-zinc-200 text-xs leading-relaxed break-words [word-break:break-word] font-medium">
                                     &ldquo;{note.text}&rdquo;
                                   </p>
                                 </div>
@@ -2513,7 +2601,7 @@ export default function MonthScheduler({
                                     )}
                                   </div>
                                 </div>
-                                <p className="text-zinc-200 text-xs leading-relaxed break-words font-medium">
+                                <p className="text-zinc-200 text-xs leading-relaxed break-words [word-break:break-word] font-medium">
                                   &ldquo;{note.text}&rdquo;
                                 </p>
                               </div>
