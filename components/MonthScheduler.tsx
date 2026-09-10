@@ -53,6 +53,9 @@ import {
 import { useLanguage } from "@/context/LanguageContext";
 import { useTutorial } from "@/context/TutorialContext";
 import TutorialCallout from "@/components/TutorialCallout";
+import SlotBadge from "@/components/ui/SlotBadge";
+import SlotButton from "@/components/ui/SlotButton";
+import NoteItem from "@/components/ui/NoteItem";
 
 const WEEKDAY_NAMES_SHORT: Record<SupportedLocale, string[]> = {
   es: ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"],
@@ -1353,13 +1356,7 @@ export default function MonthScheduler({
                                 </span>
                                 <div className="flex flex-col gap-1 w-full">
                                   {dateNotes.map((note) => (
-                                    <div
-                                      key={note.id}
-                                      className="inline-flex flex-wrap items-baseline gap-1 text-[10px] sm:text-[11px] px-2.5 py-1 rounded-xl bg-amber-500/10 border border-amber-400/20 text-zinc-200 break-words [word-break:break-word] w-full"
-                                    >
-                                      <strong className="text-amber-300 font-bold shrink-0">{note.author}:</strong>
-                                      <span className="italic break-words [word-break:break-word]">&ldquo;{note.text}&rdquo;</span>
-                                    </div>
+                                    <NoteItem key={note.id} note={note} variant="compact" />
                                   ))}
                                 </div>
                               </div>
@@ -1378,32 +1375,23 @@ export default function MonthScheduler({
                                 const slotVoters = poll.availability[slotKey] || [];
                                 const isSlotQuorum = slotVoters.length >= totalParticipants && totalParticipants > 0;
                                 const isPlayerInSlot = slotVoters.includes(selectedPlayer);
-                                const icon = formatSlotIcon(slotId);
-                                const shortLabel = formatSlotShortLabel(slotId, locale);
 
                                 return (
-                                  <button
+                                  <SlotButton
                                     key={slotId}
-                                    type="button"
+                                    slotId={slotId}
+                                    isSelected={isPlayerInSlot}
+                                    isQuorum={isSlotQuorum}
+                                    count={slotVoters.length}
+                                    totalParticipants={totalParticipants}
+                                    locale={locale}
+                                    useShortLabel
+                                    showCheckmark
+                                    dataTestId={`agenda-toggle-btn-${dateKey}-${slotId}`}
+                                    ariaLabel={`${formatSlotLabel(slotId, locale)} ${formatFriendlyDate(dateKey, locale)}`}
                                     onClick={() => toggleDateAvailability(dateKey, false, slotId)}
-                                    data-testid={`agenda-toggle-btn-${dateKey}-${slotId}`}
-                                    aria-label={`${formatSlotLabel(slotId, locale)} ${formatFriendlyDate(dateKey, locale)}`}
-                                    className={`flex-1 sm:flex-initial min-h-[42px] px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-2xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1 sm:gap-1.5 active:scale-95 border shrink-0 ${
-                                      isSlotQuorum
-                                        ? "bg-emerald-500/25 text-emerald-300 border-emerald-400/50 shadow-emerald-950/20"
-                                        : isPlayerInSlot
-                                        ? "bg-amber-500/25 text-amber-200 border-amber-400/50"
-                                        : "liquid-glass-subtle text-zinc-300 hover:text-white border-white/15"
-                                    }`}
-                                  >
-                                    <span className="text-xs">{icon}</span>
-                                    <span className="hidden xs:inline">{shortLabel}</span>
-                                    <span className="text-[10px] opacity-75 font-semibold">
-                                      ({slotVoters.length}/{totalParticipants})
-                                    </span>
-                                    {isSlotQuorum && <span>★</span>}
-                                    {isPlayerInSlot && <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5 stroke-[3]" />}
-                                  </button>
+                                    className="flex-1 sm:flex-initial shrink-0"
+                                  />
                                 );
                               })}
 
@@ -1665,29 +1653,18 @@ export default function MonthScheduler({
                     {isSlotsMode ? (
                       <div className="my-auto py-1 flex flex-col items-center gap-1.5 w-full">
                         <div className="flex items-center justify-center gap-1 flex-wrap w-full">
-                          {slotSummaryList.map((slot) => {
-                            const icon = formatSlotIcon(slot.id);
-                            return (
-                              <div
-                                key={slot.id}
-                                title={`${formatSlotLabel(slot.id, locale)}: ${slot.count}/${totalParticipants}${slot.isQuorum ? " ★" : ""}`}
-                                className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-lg text-[10px] font-bold border transition-colors ${
-                                  slot.isQuorum
-                                    ? "bg-emerald-500/25 border-emerald-400/60 text-emerald-200 shadow-sm shadow-emerald-500/20"
-                                    : slot.isVoted
-                                    ? "bg-amber-500/20 border-amber-400/50 text-amber-200"
-                                    : slot.count > 0
-                                    ? "bg-white/[0.08] border-white/15 text-zinc-300"
-                                    : "bg-black/20 border-white/[0.04] text-zinc-500"
-                                }`}
-                              >
-                                <span className="text-xs leading-none">{icon}</span>
-                                <span className="font-mono text-[9px] font-bold leading-none">
-                                  {slot.count}
-                                </span>
-                              </div>
-                            );
-                          })}
+                          {slotSummaryList.map((slot) => (
+                            <SlotBadge
+                              key={slot.id}
+                              slotId={slot.id}
+                              count={slot.count}
+                              totalParticipants={totalParticipants}
+                              isQuorum={slot.isQuorum}
+                              isVoted={slot.isVoted}
+                              locale={locale}
+                              compact
+                            />
+                          ))}
                         </div>
 
                         {/* Badge indicador de notas en modo franjas */}
@@ -1949,10 +1926,7 @@ export default function MonthScheduler({
                                 </div>
                                 <div className="space-y-1 max-h-24 overflow-y-auto">
                                   {dateNotes.map((note) => (
-                                    <div key={note.id} className="text-[11px] bg-white/5 rounded-lg p-1.5 border border-white/10 break-words [word-break:break-word]">
-                                      <span className="font-bold text-amber-300">{note.author}: </span>
-                                      <span className="text-zinc-200 break-words [word-break:break-word]">&ldquo;{note.text}&rdquo;</span>
-                                    </div>
+                                    <NoteItem key={note.id} note={note} variant="tooltip" />
                                   ))}
                                 </div>
                               </div>
@@ -2229,16 +2203,13 @@ export default function MonthScheduler({
                           >
                             <div className="flex items-center justify-between">
                               <span className="font-black text-sm text-zinc-100">{slotName}</span>
-                              <span
-                                className={`font-black px-2.5 py-0.5 rounded-full text-[11px] ${
-                                  slot.isQuorum
-                                    ? "bg-emerald-500/25 text-emerald-300 border border-emerald-400/50"
-                                    : "liquid-glass-subtle text-zinc-300 border border-white/10"
-                                }`}
-                              >
-                                {slot.isQuorum ? "★ " : ""}
-                                {slot.count}/{totalParticipants}
-                              </span>
+                              <SlotBadge
+                                slotId={slot.id}
+                                count={slot.count}
+                                totalParticipants={totalParticipants}
+                                isQuorum={slot.isQuorum}
+                                compact={false}
+                              />
                             </div>
 
                             {/* Votantes de esta franja */}
@@ -2324,67 +2295,21 @@ export default function MonthScheduler({
                             {dateNotes.map((note) => {
                               const isMyNote = selectedPlayer === note.author;
                               return (
-                                <div
+                                <NoteItem
                                   key={note.id}
-                                  data-testid={`note-item-${note.id}`}
-                                  className={`p-2.5 rounded-2xl border text-xs space-y-1 transition-colors ${
-                                    isMyNote
-                                      ? "bg-amber-500/10 border-amber-400/30 text-zinc-100"
-                                      : "liquid-glass-subtle border-white/10 text-zinc-300"
-                                  }`}
-                                >
-                                  <div className="flex items-center justify-between text-[10px]">
-                                    <div className="flex items-center gap-1.5">
-                                      <span
-                                        className={`font-black ${
-                                          isMyNote ? "text-amber-300" : "text-zinc-200"
-                                        }`}
-                                      >
-                                        {note.author}
-                                      </span>
-                                      {isMyNote && (
-                                        <span className="px-1.5 py-0.2 rounded-md bg-amber-400/20 text-amber-300 font-bold text-[9px]">
-                                          {locale === "en" ? "You" : "Tú"}
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-zinc-500 text-[10px]">
-                                        {formatCommentTime(note.createdAt, locale)}
-                                      </span>
-                                      {isMyNote && (
-                                        <div className="flex items-center gap-1">
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              setCommentInput(note.text);
-                                              setIsEditingComment(true);
-                                            }}
-                                            title={t("scheduler.editNoteBtn")}
-                                            aria-label={t("scheduler.editNoteBtn")}
-                                            data-testid={`note-edit-btn-${note.id}`}
-                                            className="p-1 hover:text-amber-300 text-zinc-400 transition-colors"
-                                          >
-                                            <Edit3 className="w-3 h-3" />
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleDeleteComment(activeDayModal.dateString, note.id)}
-                                            title={t("scheduler.deleteNoteBtn")}
-                                            aria-label={t("scheduler.deleteNoteBtn")}
-                                            data-testid={`note-delete-btn-${note.id}`}
-                                            className="p-1 hover:text-red-400 text-zinc-400 transition-colors"
-                                          >
-                                            <Trash2 className="w-3 h-3" />
-                                          </button>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <p className="text-zinc-200 text-xs leading-relaxed break-words [word-break:break-word] font-medium">
-                                    &ldquo;{note.text}&rdquo;
-                                  </p>
-                                </div>
+                                  note={note}
+                                  isMyNote={isMyNote}
+                                  locale={locale}
+                                  formattedTime={formatCommentTime(note.createdAt, locale)}
+                                  onEdit={() => {
+                                    setCommentInput(note.text);
+                                    setIsEditingComment(true);
+                                  }}
+                                  onDelete={() => handleDeleteComment(activeDayModal.dateString, note.id)}
+                                  editLabel={t("scheduler.editNoteBtn")}
+                                  deleteLabel={t("scheduler.deleteNoteBtn")}
+                                  youLabel={locale === "en" ? "You" : "Tú"}
+                                />
                               );
                             })}
                           </div>
@@ -2544,67 +2469,21 @@ export default function MonthScheduler({
                           {dateNotes.map((note) => {
                             const isMyNote = selectedPlayer === note.author;
                             return (
-                              <div
+                              <NoteItem
                                 key={note.id}
-                                data-testid={`note-item-${note.id}`}
-                                className={`p-2.5 rounded-2xl border text-xs space-y-1 transition-colors ${
-                                  isMyNote
-                                    ? "bg-amber-500/10 border-amber-400/30 text-zinc-100"
-                                    : "liquid-glass-subtle border-white/10 text-zinc-300"
-                                }`}
-                              >
-                                <div className="flex items-center justify-between text-[10px]">
-                                  <div className="flex items-center gap-1.5">
-                                    <span
-                                      className={`font-black ${
-                                        isMyNote ? "text-amber-300" : "text-zinc-200"
-                                      }`}
-                                    >
-                                      {note.author}
-                                    </span>
-                                    {isMyNote && (
-                                      <span className="px-1.5 py-0.2 rounded-md bg-amber-400/20 text-amber-300 font-bold text-[9px]">
-                                        {locale === "en" ? "You" : "Tú"}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-zinc-500 text-[10px]">
-                                      {formatCommentTime(note.createdAt, locale)}
-                                    </span>
-                                    {isMyNote && (
-                                      <div className="flex items-center gap-1">
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setCommentInput(note.text);
-                                            setIsEditingComment(true);
-                                          }}
-                                          title={t("scheduler.editNoteBtn")}
-                                          aria-label={t("scheduler.editNoteBtn")}
-                                          data-testid={`note-edit-btn-${note.id}`}
-                                          className="p-1 hover:text-amber-300 text-zinc-400 transition-colors"
-                                        >
-                                          <Edit3 className="w-3 h-3" />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleDeleteComment(activeDayModal.dateString, note.id)}
-                                          title={t("scheduler.deleteNoteBtn")}
-                                          aria-label={t("scheduler.deleteNoteBtn")}
-                                          data-testid={`note-delete-btn-${note.id}`}
-                                          className="p-1 hover:text-red-400 text-zinc-400 transition-colors"
-                                        >
-                                          <Trash2 className="w-3 h-3" />
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                                <p className="text-zinc-200 text-xs leading-relaxed break-words [word-break:break-word] font-medium">
-                                  &ldquo;{note.text}&rdquo;
-                                </p>
-                              </div>
+                                note={note}
+                                isMyNote={isMyNote}
+                                locale={locale}
+                                formattedTime={formatCommentTime(note.createdAt, locale)}
+                                onEdit={() => {
+                                  setCommentInput(note.text);
+                                  setIsEditingComment(true);
+                                }}
+                                onDelete={() => handleDeleteComment(activeDayModal.dateString, note.id)}
+                                editLabel={t("scheduler.editNoteBtn")}
+                                deleteLabel={t("scheduler.deleteNoteBtn")}
+                                youLabel={locale === "en" ? "You" : "Tú"}
+                              />
                             );
                           })}
                         </div>
