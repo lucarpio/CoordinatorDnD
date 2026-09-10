@@ -15,13 +15,16 @@ import {
   Plus,
   X,
   BookmarkCheck,
+  Clock,
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { supabase, TimeMode, SlotId } from "@/lib/supabase";
 import { MONTH_NAMES } from "@/lib/calendarUtils";
 import { saveCreatedPoll, getSavedPolls, SavedPoll } from "@/lib/storage";
 import { useLanguage } from "@/context/LanguageContext";
 import { useTutorial } from "@/context/TutorialContext";
 import TutorialCallout from "@/components/TutorialCallout";
+import Button from "@/components/ui/Button";
+import SegmentedControl from "@/components/ui/SegmentedControl";
 
 export default function Home() {
   const router = useRouter();
@@ -40,6 +43,20 @@ export default function Home() {
   const [participantInput, setParticipantInput] = useState<string>("");
   const [participants, setParticipants] = useState<string[]>([]);
   const [savedPolls, setSavedPolls] = useState<SavedPoll[]>([]);
+  const [timeMode, setTimeMode] = useState<TimeMode>("single");
+  const [defaultTime, setDefaultTime] = useState<string>("20:30");
+  const [selectedSlots, setSelectedSlots] = useState<SlotId[]>(["afternoon", "night"]);
+
+  const toggleSlotSelection = (slot: SlotId) => {
+    if (selectedSlots.includes(slot)) {
+      if (selectedSlots.length === 1) {
+        return; // Mantener al menos 1 franja seleccionada
+      }
+      setSelectedSlots(selectedSlots.filter((s) => s !== slot));
+    } else {
+      setSelectedSlots([...selectedSlots, slot]);
+    }
+  };
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
@@ -151,6 +168,11 @@ export default function Home() {
       return;
     }
 
+    if (timeMode === "slots" && selectedSlots.length === 0) {
+      setErrorMessage(t("home.errorAtLeastOneSlot"));
+      return;
+    }
+
     completeStep("home_create");
     setIsLoading(true);
 
@@ -166,6 +188,12 @@ export default function Home() {
           month,
           participants,
           availability: {},
+          time_mode: timeMode,
+          time_slots:
+            timeMode === "slots"
+              ? (["morning", "afternoon", "night"] as SlotId[]).filter((s) => selectedSlots.includes(s))
+              : [],
+          default_time: defaultTime.trim() || "20:30",
         })
         .select()
         .single();
@@ -275,24 +303,27 @@ export default function Home() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 pt-1">
-            <button
+            <Button
+              variant="emerald"
+              size="lg"
               onClick={handleCopyWhatsAppLink}
               data-testid="copy-share-url-btn"
               aria-label={copiedLink ? t("home.copied") : t("home.copyLink")}
-              className="flex-1 px-4 py-3.5 ios-btn-emerald text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+              icon={<Copy className="w-4 h-4" />}
+              className="flex-1"
             >
-              <Copy className="w-4 h-4" />
               {copiedLink ? t("home.copied") : t("home.copyLink")}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="subtle"
+              size="lg"
               onClick={() => router.push(`/m/${createdRoom.slug}`)}
               data-testid="go-to-created-room-btn"
               aria-label={t("home.goToRoom")}
-              className="px-6 py-3.5 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-100 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] border border-white/15"
+              icon={<ArrowRight className="w-4 h-4" />}
             >
               {t("home.goToRoom")}
-              <ArrowRight className="w-4 h-4" />
-            </button>
+            </Button>
           </div>
         </div>
       ) : (
@@ -415,16 +446,17 @@ export default function Home() {
                 placeholder={t("home.participantPlaceholder")}
                 className="flex-1 liquid-glass-input rounded-2xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500"
               />
-              <button
+              <Button
                 type="button"
+                variant="subtle"
+                size="sm"
                 onClick={handleAddParticipant}
                 data-testid="add-participant-btn"
                 aria-label={t("home.addBtn")}
-                className="px-4 py-2.5 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-200 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all border border-white/10 active:scale-95"
+                icon={<Plus className="w-4 h-4" />}
               >
-                <Plus className="w-4 h-4" />
                 {t("home.addBtn")}
-              </button>
+              </Button>
             </div>
 
             {/* Tags de participantes */}
@@ -455,17 +487,102 @@ export default function Home() {
             )}
           </div>
 
+          {/* Modalidad de Horario (Horario Único vs Franjas) */}
+          <div className="space-y-3 pt-2 border-t border-white/[0.08]">
+            <label className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-amber-400" />
+              {t("home.scheduleModeTitle")}
+            </label>
+
+            {/* Segmented Control iOS */}
+            <SegmentedControl
+              value={timeMode}
+              onChange={(val) => setTimeMode(val as TimeMode)}
+              fullWidth
+              options={[
+                {
+                  value: "single",
+                  label: t("home.scheduleModeSingle"),
+                  testId: "schedule-mode-single-btn",
+                },
+                {
+                  value: "slots",
+                  label: t("home.scheduleModeSlots"),
+                  testId: "schedule-mode-slots-btn",
+                },
+              ]}
+            />
+
+            {/* Contenido según el modo */}
+            {timeMode === "single" ? (
+              <div className="space-y-1.5 pt-1">
+                <label
+                  htmlFor="default-time-input"
+                  className="block text-[11px] text-zinc-400 font-medium"
+                >
+                  {t("home.scheduleSingleTimeLabel")}
+                </label>
+                <input
+                  id="default-time-input"
+                  data-testid="default-time-input"
+                  type="time"
+                  value={defaultTime}
+                  onChange={(e) => setDefaultTime(e.target.value)}
+                  className="w-full sm:w-48 liquid-glass-input rounded-2xl px-4 py-2.5 text-sm text-zinc-100"
+                />
+              </div>
+            ) : (
+              <div className="space-y-2 pt-1">
+                <span className="block text-[11px] text-zinc-400 font-medium">
+                  {t("home.scheduleSlotsSelectLabel")}
+                </span>
+                {/* Píldoras interactivas estilo iOS Chips */}
+                <div className="flex flex-wrap gap-2.5">
+                  {(
+                    [
+                      { id: "morning" as const, label: t("home.slotMorning") },
+                      { id: "afternoon" as const, label: t("home.slotAfternoon") },
+                      { id: "night" as const, label: t("home.slotNight") },
+                    ]
+                  ).map((slot) => {
+                    const isSelected = selectedSlots.includes(slot.id);
+                    return (
+                      <button
+                        key={slot.id}
+                        type="button"
+                        onClick={() => toggleSlotSelection(slot.id)}
+                        data-testid={`slot-pill-${slot.id}`}
+                        aria-pressed={isSelected}
+                        className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all flex items-center gap-2 border active:scale-95 shadow-sm ${
+                          isSelected
+                            ? "bg-amber-500/25 border-amber-400/60 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.2)]"
+                            : "liquid-glass-subtle border-white/10 text-zinc-400 hover:text-zinc-200 hover:border-white/20 opacity-60"
+                        }`}
+                      >
+                        <span>{slot.label}</span>
+                        {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="pt-2">
-            <button
+            <Button
               type="submit"
+              variant="amber"
+              size="lg"
+              fullWidth
+              isLoading={isLoading}
               disabled={isLoading}
               data-testid="create-poll-submit-btn"
               aria-label={isLoading ? t("home.creatingBtn") : t("home.submitBtn")}
-              className="w-full py-4 ios-btn-amber text-zinc-950 font-black text-sm uppercase tracking-wider rounded-2xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98]"
+              icon={<Dices className="w-5 h-5" />}
             >
-              <Dices className="w-5 h-5" />
               {isLoading ? t("home.creatingBtn") : t("home.submitBtn")}
-            </button>
+            </Button>
           </div>
         </form>
       </div>

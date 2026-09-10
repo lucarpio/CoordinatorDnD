@@ -1,4 +1,4 @@
-import type { DateCommentsMap } from "./supabase";
+import type { DateCommentsMap, SlotId, TimeMode } from "./supabase";
 
 export type SupportedLocale = "es" | "en";
 
@@ -124,32 +124,114 @@ export function formatFriendlyDate(dateString: string, locale: SupportedLocale =
 }
 
 /**
- * Genera el enlace parametrizado para Google Calendar (8:30 PM a 11:59 PM)
+ * Codifica una clave de disponibilidad.
+ * Si slotId existe: "2026-09-15#night"
+ * Si no: "2026-09-15"
+ */
+export function encodeAvailabilityKey(dateStr: string, slotId?: SlotId): string {
+  return slotId ? `${dateStr}#${slotId}` : dateStr;
+}
+
+/**
+ * Decodifica una clave de disponibilidad.
+ */
+export function decodeAvailabilityKey(key: string): { dateStr: string; slotId?: SlotId } {
+  if (key.includes("#")) {
+    const [dateStr, slotId] = key.split("#");
+    return { dateStr, slotId: slotId as SlotId };
+  }
+  return { dateStr: key };
+}
+
+/**
+ * Nombre legible con icono para una franja horaria.
+ */
+export function formatSlotLabel(slotId: SlotId, locale: SupportedLocale = "es"): string {
+  if (slotId === "morning") return locale === "en" ? "🌅 Morning" : "🌅 Mañana";
+  if (slotId === "afternoon") return locale === "en" ? "☀️ Afternoon" : "☀️ Tarde";
+  if (slotId === "night") return locale === "en" ? "🌙 Night" : "🌙 Noche";
+  return slotId;
+}
+
+/**
+ * Solo el icono emoji representativo de una franja horaria.
+ */
+export function formatSlotIcon(slotId: SlotId): string {
+  if (slotId === "morning") return "🌅";
+  if (slotId === "afternoon") return "☀️";
+  if (slotId === "night") return "🌙";
+  return "⏰";
+}
+
+/**
+ * Nombre corto sin icono para una franja horaria.
+ */
+export function formatSlotShortLabel(slotId: SlotId, locale: SupportedLocale = "es"): string {
+  if (slotId === "morning") return locale === "en" ? "Morning" : "Mañana";
+  if (slotId === "afternoon") return locale === "en" ? "Afternoon" : "Tarde";
+  if (slotId === "night") return locale === "en" ? "Night" : "Noche";
+  return slotId;
+}
+
+/**
+ * Obtiene los tiempos sugeridos de referencia para Google Calendar y .ics
+ */
+export function getSlotTimeParams(slotId?: SlotId, defaultTime?: string): { startH: string; endH: string; label: string } {
+  if (slotId === "morning") {
+    return { startH: "100000", endH: "140000", label: "10:00 AM" };
+  }
+  if (slotId === "afternoon") {
+    return { startH: "160000", endH: "193000", label: "4:00 PM" };
+  }
+  if (slotId === "night") {
+    return { startH: "203000", endH: "235900", label: "8:30 PM" };
+  }
+  if (defaultTime) {
+    const cleanTime = defaultTime.trim();
+    const parts = cleanTime.split(":");
+    if (parts.length >= 2) {
+      const h = parts[0].padStart(2, "0");
+      const m = parts[1].slice(0, 2).padStart(2, "0");
+      const startH = `${h}${m}00`;
+      const endHNum = (parseInt(h, 10) + 3) % 24;
+      const endH = `${String(endHNum).padStart(2, "0")}${m}00`;
+      return { startH, endH, label: defaultTime };
+    }
+  }
+  return { startH: "203000", endH: "235900", label: "8:30 PM" };
+}
+
+/**
+ * Genera el enlace parametrizado para Google Calendar (compatible con fechas y franjas)
  */
 export function generateGoogleCalendarUrl(
   title: string,
-  dateString: string,
+  keyOrDateString: string,
   details?: string,
-  locale: SupportedLocale = "es"
+  locale: SupportedLocale = "es",
+  defaultTime?: string
 ): string {
-  const cleanDate = dateString.replace(/-/g, "");
-  // 8:30 PM = 20:30:00, fin a 23:59:00
-  const startParam = `${cleanDate}T203000`;
-  const endParam = `${cleanDate}T235900`;
+  const { dateStr, slotId } = decodeAvailabilityKey(keyOrDateString);
+  const cleanDate = dateStr.replace(/-/g, "");
+  const { startH, endH, label } = getSlotTimeParams(slotId, defaultTime);
+  const slotSuffix = slotId ? ` (${formatSlotLabel(slotId, locale)})` : "";
+
+  const startParam = `${cleanDate}T${startH}`;
+  const endParam = `${cleanDate}T${endH}`;
 
   const url = new URL("https://calendar.google.com/calendar/render");
   url.searchParams.set("action", "TEMPLATE");
   url.searchParams.set(
     "text",
-    locale === "en" ? `D&D Session: ${title}` : `Sesión D&D: ${title}`
+    locale === "en" ? `D&D Session: ${title}${slotSuffix}` : `Sesión D&D: ${title}${slotSuffix}`
   );
   url.searchParams.set("dates", `${startParam}/${endParam}`);
   url.searchParams.set(
     "details",
     details ||
       (locale === "en"
-        ? `Monthly Dungeons & Dragons session for "${title}".\nTime: 8:30 PM (20:30). Bring your dice and character sheet!`
-        : `Sesión mensual de Dungeons & Dragons para la campaña "${title}".\nHorario: 8:30 PM (20:30). ¡Trae tus dados y hoja de personaje!`)
+        ? `Monthly Dungeons & Dragons session for "${title}".\nTime: ${slotSuffix ? formatSlotLabel(slotId!, locale) : label}. Bring your dice and character sheet!`
+        : `Sesión mensual de Dungeons & Dragons para la campaña "${title}".\nHorario: ${slotSuffix ? formatSlotLabel(slotId!, locale) : label}. ¡Trae tus dados y hoja de personaje!`)
   );
   url.searchParams.set("location", locale === "en" ? "Tabletop / Discord" : "En mesa / Discord");
 
@@ -161,24 +243,28 @@ export function generateGoogleCalendarUrl(
  */
 export function generateIcsContent(
   title: string,
-  confirmedDates: string[],
-  locale: SupportedLocale = "es"
+  confirmedKeys: string[],
+  locale: SupportedLocale = "es",
+  defaultTime?: string
 ): string {
   const now = new Date();
   const dtstamp = now.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 
-  const summary = locale === "en" ? `D&D Session: ${title}` : `Sesión D&D: ${title}`;
-  const description =
-    locale === "en"
-      ? `Monthly session confirmed with 100% quorum for "${title}". Time: 8:30 PM.`
-      : `Sesión mensual confirmada con 100% de quórum para "${title}". Horario: 8:30 PM.`;
-  const location = locale === "en" ? "Tabletop / Discord" : "En mesa / Discord";
-
-  const events = confirmedDates.map((dateStr, idx) => {
+  const events = confirmedKeys.map((key, idx) => {
+    const { dateStr, slotId } = decodeAvailabilityKey(key);
     const cleanDate = dateStr.replace(/-/g, "");
-    const dtstart = `${cleanDate}T203000`;
-    const dtend = `${cleanDate}T235900`;
-    const uid = `dnd-session-${cleanDate}-${idx}@coordinator-dnd`;
+    const { startH, endH, label } = getSlotTimeParams(slotId, defaultTime);
+    const slotSuffix = slotId ? ` (${formatSlotLabel(slotId, locale)})` : "";
+
+    const dtstart = `${cleanDate}T${startH}`;
+    const dtend = `${cleanDate}T${endH}`;
+    const uid = `dnd-session-${cleanDate}-${slotId || "session"}-${idx}@coordinator-dnd`;
+    const summary = locale === "en" ? `D&D Session: ${title}${slotSuffix}` : `Sesión D&D: ${title}${slotSuffix}`;
+    const description =
+      locale === "en"
+        ? `Monthly session confirmed with 100% quorum for "${title}". Time: ${slotSuffix || label}.`
+        : `Sesión mensual confirmada con 100% de quórum para "${title}". Horario: ${slotSuffix || label}.`;
+    const location = locale === "en" ? "Tabletop / Discord" : "En mesa / Discord";
 
     return [
       "BEGIN:VEVENT",
@@ -228,24 +314,36 @@ export function generateWhatsAppSummary(
   year: number,
   month: number,
   participants: string[],
-  confirmedDates: string[],
+  confirmedKeys: string[],
   roomUrl?: string,
   locale: SupportedLocale = "es",
-  comments?: DateCommentsMap
+  comments?: DateCommentsMap,
+  timeMode: TimeMode = "single",
+  defaultTime: string = "8:30 PM",
+  timeSlots?: SlotId[]
 ): string {
   const monthName = MONTH_NAMES[locale][month - 1];
   const total = participants.length;
 
+  const timeHeader =
+    timeMode === "slots"
+      ? (timeSlots || ["morning", "afternoon", "night"])
+          .map((s) => formatSlotLabel(s, locale))
+          .join(" • ")
+      : defaultTime;
+
   if (locale === "en") {
     let text = `🎲⚔️ *D&D SESSION: ${title.toUpperCase()}* ⚔️🎲\n`;
     text += `📅 *Month:* ${monthName} ${year}\n`;
-    text += `⏰ *Time:* 8:30 PM (Fixed)\n`;
+    text += `⏰ *${timeMode === "slots" ? "Time Slots:" : "Time:"}* ${timeHeader}\n`;
     text += `👥 *Adventurers (${total}):* ${participants.join(", ")}\n\n`;
 
-    if (confirmedDates.length > 0) {
+    if (confirmedKeys.length > 0) {
       text += `✨ *CONFIRMED DATES (100% Quorum)!* ✨\n`;
-      confirmedDates.forEach((dateStr) => {
-        text += `  ⭐ *${formatFriendlyDate(dateStr, "en")}* (8:30 PM)\n`;
+      confirmedKeys.forEach((key) => {
+        const { dateStr, slotId } = decodeAvailabilityKey(key);
+        const slotPart = slotId ? ` - ${formatSlotLabel(slotId, "en")}` : ` (${defaultTime})`;
+        text += `  ⭐ *${formatFriendlyDate(dateStr, "en")}*${slotPart}\n`;
         const dateNotes = comments?.[dateStr];
         if (dateNotes && dateNotes.length > 0) {
           dateNotes.forEach((note) => {
@@ -268,13 +366,15 @@ export function generateWhatsAppSummary(
 
   let text = `🎲⚔️ *SESIÓN D&D: ${title.toUpperCase()}* ⚔️🎲\n`;
   text += `📅 *Mes:* ${monthName} ${year}\n`;
-  text += `⏰ *Horario:* 8:30 PM (Fijo)\n`;
+  text += `⏰ *${timeMode === "slots" ? "Franjas:" : "Horario:"}* ${timeHeader}\n`;
   text += `👥 *Aventureros (${total}):* ${participants.join(", ")}\n\n`;
 
-  if (confirmedDates.length > 0) {
+  if (confirmedKeys.length > 0) {
     text += `✨ *¡FECHAS CONFIRMADAS (100% Quórum)!* ✨\n`;
-    confirmedDates.forEach((dateStr) => {
-      text += `  ⭐ *${formatFriendlyDate(dateStr, "es")}* (8:30 PM)\n`;
+    confirmedKeys.forEach((key) => {
+      const { dateStr, slotId } = decodeAvailabilityKey(key);
+      const slotPart = slotId ? ` - ${formatSlotLabel(slotId, "es")}` : ` (${defaultTime})`;
+      text += `  ⭐ *${formatFriendlyDate(dateStr, "es")}*${slotPart}\n`;
       const dateNotes = comments?.[dateStr];
       if (dateNotes && dateNotes.length > 0) {
         dateNotes.forEach((note) => {

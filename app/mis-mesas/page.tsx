@@ -23,6 +23,8 @@ import { MONTH_NAMES, formatFriendlyDate } from "@/lib/calendarUtils";
 import { useLanguage } from "@/context/LanguageContext";
 import { useTutorial } from "@/context/TutorialContext";
 import TutorialCallout from "@/components/TutorialCallout";
+import Button from "@/components/ui/Button";
+import Badge from "@/components/ui/Badge";
 
 export default function MisMesasPage() {
   const router = useRouter();
@@ -212,7 +214,7 @@ export default function MisMesasPage() {
 
         <Link
           href="/"
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 ios-btn-amber text-zinc-950 font-black text-sm rounded-2xl active:scale-95 transition-all shadow-md shadow-amber-500/20"
+          className="btn-amber px-4 py-2.5 text-sm rounded-2xl"
         >
           <PlusCircle className="w-4 h-4" />
           {t("nav.newPoll")}
@@ -222,19 +224,22 @@ export default function MisMesasPage() {
       {/* Listado de Mesas */}
       {savedPolls.length === 0 ? (
         <div className="liquid-glass rounded-3xl p-8 sm:p-12 text-center space-y-5">
-          <div className="w-16 h-16 rounded-2xl liquid-glass-subtle flex items-center justify-center mx-auto text-amber-400 border border-white/15 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)]">
-            <Dices className="w-8 h-8" />
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/15 text-amber-400 flex items-center justify-center mx-auto border border-amber-400/20 shadow-inner">
+            <Calendar className="w-8 h-8 stroke-[1.5]" />
           </div>
           <div className="space-y-2 max-w-md mx-auto">
-            <h3 className="text-xl font-bold text-zinc-100 tracking-tight">{t("misMesas.emptyTitle")}</h3>
-            <p className="text-zinc-400 text-xs sm:text-sm leading-relaxed">
-              {t("misMesas.emptySubtitle")}
+            <h2 className="text-xl font-bold text-zinc-100 tracking-tight">
+              {t("misMesas.noTablesTitle")}
+            </h2>
+            <p className="text-sm text-zinc-400 leading-relaxed">
+              {t("misMesas.noTablesDesc")}
             </p>
           </div>
-          <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+          <div className="pt-2">
             <Link
               href="/"
-              className="w-full sm:w-auto px-6 py-3.5 ios-btn-amber text-zinc-950 font-extrabold text-sm rounded-2xl transition-all flex items-center justify-center gap-2 active:scale-95"
+              data-testid="create-first-table-btn"
+              className="btn-amber px-5 py-3 text-sm rounded-2xl"
             >
               <PlusCircle className="w-4 h-4" />
               {t("misMesas.createNewBtn")}
@@ -317,16 +322,15 @@ export default function MisMesasPage() {
                   {/* Estado de Quórum */}
                   <div>
                     {confirmedDates.length > 0 ? (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-xs font-bold animate-pulse shadow-sm">
-                        <Sparkles className="w-3.5 h-3.5" />
+                      <Badge variant="emerald" icon={<Sparkles className="w-3.5 h-3.5" />} className="animate-pulse shadow-sm">
                         {locale === "en"
                           ? `★ ${confirmedDates.length} ${confirmedDates.length === 1 ? "date confirmed!" : "dates confirmed!"}`
                           : `¡${confirmedDates.length} ${confirmedDates.length === 1 ? "fecha confirmada" : "fechas confirmadas"}!`}
-                      </span>
+                      </Badge>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full liquid-glass-subtle text-zinc-400 text-xs font-medium border border-white/10">
+                      <Badge variant="neutral">
                         {locale === "en" ? "Voting in progress" : "En votación"}
-                      </span>
+                      </Badge>
                     )}
                   </div>
                 </div>
@@ -351,45 +355,48 @@ export default function MisMesasPage() {
                 {/* Acciones */}
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-white/[0.08]">
                   <div className="flex items-center gap-2">
-                    <button
+                    <Button
+                      variant="subtle"
+                      size="sm"
                       onClick={() => handleCopyWhatsApp(saved.slug, title)}
                       data-testid={`whatsapp-table-btn-${saved.slug}`}
                       aria-label={copiedSlug === saved.slug ? t("home.copied") : `${t("scheduler.whatsAppBtn")} - ${title}`}
-                      className="px-3.5 py-2.5 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-200 rounded-2xl text-xs font-semibold flex items-center gap-1.5 transition-all border border-white/10 active:scale-95"
+                      icon={
+                        copiedSlug === saved.slug ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )
+                      }
                     >
                       {copiedSlug === saved.slug ? (
-                        <>
-                          <Check className="w-3.5 h-3.5 text-emerald-400" />
-                          <span className="text-emerald-400 font-bold">{t("home.copied")}</span>
-                        </>
+                        <span className="text-emerald-400 font-bold">{t("home.copied")}</span>
                       ) : (
-                        <>
-                          <Copy className="w-3.5 h-3.5" />
-                          <span>{t("scheduler.whatsAppBtn")}</span>
-                        </>
+                        t("scheduler.whatsAppBtn")
                       )}
-                    </button>
+                    </Button>
 
                     <button
                       onClick={() => handleRemove(saved.slug, title)}
                       data-testid={`remove-table-btn-${saved.slug}`}
                       aria-label={`${t("misMesas.confirmDelete")} ${title}`}
-                      className="p-2.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-2xl transition-all"
+                      className="btn-icon text-zinc-500 hover:text-red-400 hover:bg-red-500/10"
                       title={t("misMesas.confirmDelete")}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
 
-                  <button
+                  <Button
+                    variant="amber"
+                    size="sm"
                     onClick={() => router.push(`/m/${saved.slug}`)}
                     data-testid={`go-to-table-btn-${saved.slug}`}
                     aria-label={`${t("home.goToRoom")} ${title}`}
-                    className="px-4 py-2.5 ios-btn-amber text-zinc-950 rounded-2xl text-xs font-black flex items-center gap-1.5 transition-all shadow-md shadow-amber-500/15 active:scale-95"
+                    icon={<ArrowRight className="w-3.5 h-3.5" />}
                   >
-                    <span>{t("home.goToRoom")}</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
+                    {t("home.goToRoom")}
+                  </Button>
                 </div>
               </div>
             );
@@ -420,15 +427,17 @@ export default function MisMesasPage() {
             placeholder={t("misMesas.importPlaceholder")}
             className="flex-1 liquid-glass-input rounded-2xl px-4 py-2.5 text-xs sm:text-sm text-zinc-100 placeholder:text-zinc-500"
           />
-          <button
+          <Button
             type="submit"
+            variant="subtle"
+            size="sm"
             disabled={importLoading || !importInput.trim()}
+            isLoading={importLoading}
             data-testid="import-poll-btn"
             aria-label={importLoading ? t("common.loading") : t("misMesas.importBtn")}
-            className="px-4 py-2.5 liquid-glass-subtle hover:bg-white/[0.12] disabled:opacity-50 text-zinc-200 rounded-2xl text-xs font-bold transition-all border border-white/15 flex items-center justify-center gap-1.5 active:scale-95"
           >
             {importLoading ? t("common.loading") : t("misMesas.importBtn")}
-          </button>
+          </Button>
         </form>
 
         {importError && (

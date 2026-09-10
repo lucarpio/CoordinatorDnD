@@ -27,8 +27,9 @@ import {
   MessageSquare,
   Edit3,
   Trash2,
+  Clock,
 } from "lucide-react";
-import { Poll, AvailabilityMap, DateComment, DateCommentsMap } from "@/lib/supabase";
+import { Poll, AvailabilityMap, DateComment, DateCommentsMap, SlotId, TimeMode } from "@/lib/supabase";
 import ClaimCharacterModal from "@/components/ClaimCharacterModal";
 import { saveCreatedPoll } from "@/lib/storage";
 import {
@@ -41,12 +42,25 @@ import {
   generateGoogleCalendarUrl,
   generateIcsContent,
   downloadIcsFile,
+  encodeAvailabilityKey,
+  decodeAvailabilityKey,
+  formatSlotLabel,
+  formatSlotShortLabel,
+  formatSlotIcon,
   CalendarDay,
   SupportedLocale,
 } from "@/lib/calendarUtils";
 import { useLanguage } from "@/context/LanguageContext";
 import { useTutorial } from "@/context/TutorialContext";
 import TutorialCallout from "@/components/TutorialCallout";
+import SlotBadge from "@/components/ui/SlotBadge";
+import SlotButton from "@/components/ui/SlotButton";
+import NoteItem from "@/components/ui/NoteItem";
+import Button from "@/components/ui/Button";
+import Badge from "@/components/ui/Badge";
+import PlayerAvatar from "@/components/ui/PlayerAvatar";
+import SegmentedControl from "@/components/ui/SegmentedControl";
+import Modal from "@/components/ui/Modal";
 
 const WEEKDAY_NAMES_SHORT: Record<SupportedLocale, string[]> = {
   es: ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"],
@@ -103,7 +117,18 @@ export default function MonthScheduler({
   const [showGoogleDropdown, setShowGoogleDropdown] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [listFilter, setListFilter] = useState<"all" | "weekends" | "quorum">("all");
+  const [slotPickerDay, setSlotPickerDay] = useState<CalendarDay | null>(null);
   const googleDropdownRef = useRef<HTMLDivElement>(null);
+
+  const isSlotsMode = poll.time_mode === "slots";
+  const activeSlots: SlotId[] = useMemo(() => {
+    if (!isSlotsMode) return [];
+    const canonicalOrder: SlotId[] = ["morning", "afternoon", "night"];
+    const rawSlots = poll.time_slots && poll.time_slots.length > 0
+      ? poll.time_slots
+      : canonicalOrder;
+    return canonicalOrder.filter((s) => rawSlots.includes(s));
+  }, [isSlotsMode, poll.time_slots]);
 
   // En dispositivos móviles (pantallas < 640px), activar por defecto la vista Lista/Agenda
   useEffect(() => {
@@ -156,6 +181,52 @@ export default function MonthScheduler({
   const pendingSaveRef = useRef<{ availability: AvailabilityMap; comments?: DateCommentsMap } | null>(null);
   const selectedPlayerRef = useRef<string>(selectedPlayer);
 
+  const hoverLeaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleCellMouseEnter = useCallback((day: CalendarDay) => {
+    if (hoverLeaveTimeoutRef.current) {
+      clearTimeout(hoverLeaveTimeoutRef.current);
+      hoverLeaveTimeoutRef.current = null;
+    }
+    setHoveredDay(day);
+  }, []);
+
+  const handleCellMouseLeave = useCallback(() => {
+    if (hoverLeaveTimeoutRef.current) {
+      clearTimeout(hoverLeaveTimeoutRef.current);
+    }
+    hoverLeaveTimeoutRef.current = setTimeout(() => {
+      setHoveredDay(null);
+      hoverLeaveTimeoutRef.current = null;
+    }, 180);
+  }, []);
+
+  const handleTooltipMouseEnter = useCallback(() => {
+    if (hoverLeaveTimeoutRef.current) {
+      clearTimeout(hoverLeaveTimeoutRef.current);
+      hoverLeaveTimeoutRef.current = null;
+    }
+  }, []);
+
+  const handleTooltipMouseLeave = useCallback(() => {
+    if (hoverLeaveTimeoutRef.current) {
+      clearTimeout(hoverLeaveTimeoutRef.current);
+    }
+    hoverLeaveTimeoutRef.current = setTimeout(() => {
+      setHoveredDay(null);
+      hoverLeaveTimeoutRef.current = null;
+    }, 180);
+  }, []);
+
+  // Limpiar timer de hover al desmontar
+  useEffect(() => {
+    return () => {
+      if (hoverLeaveTimeoutRef.current) {
+        clearTimeout(hoverLeaveTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Estados para notas y comentarios
   const [quickNoteDate, setQuickNoteDate] = useState<string | null>(null);
   const [commentInput, setCommentInput] = useState<string>("");
@@ -163,6 +234,7 @@ export default function MonthScheduler({
   const [isSavingComment, setIsSavingComment] = useState<boolean>(false);
   const [confirmUnmarkDate, setConfirmUnmarkDate] = useState<{
     dateStr: string;
+    slotId?: SlotId;
     commentText: string;
   } | null>(null);
 
@@ -335,10 +407,20 @@ export default function MonthScheduler({
 
   const playerMarkedDatesCount = useMemo(() => {
     if (!selectedPlayer) return 0;
+    if (isSlotsMode) {
+      const uniqueDates = new Set<string>();
+      Object.entries(poll.availability || {}).forEach(([key, voters]) => {
+        if (voters && voters.includes(selectedPlayer)) {
+          const { dateStr } = decodeAvailabilityKey(key);
+          uniqueDates.add(dateStr);
+        }
+      });
+      return uniqueDates.size;
+    }
     return Object.values(poll.availability || {}).filter(
       (voters) => voters && voters.includes(selectedPlayer)
     ).length;
-  }, [poll.availability, selectedPlayer]);
+  }, [poll.availability, selectedPlayer, isSlotsMode]);
 
   const todayDateStr = useMemo(() => formatDateKey(new Date()), []);
 
@@ -361,8 +443,6 @@ export default function MonthScheduler({
         return false;
       }
 
-      const voters = poll.availability[cellDay.dateString] || [];
-      const voterCount = voters.length;
       const dayOfWeek = cellDay.date.getDay();
       const isWeekendOrFriday = dayOfWeek === 0 || dayOfWeek === 5 || dayOfWeek === 6;
 
@@ -370,21 +450,36 @@ export default function MonthScheduler({
         return isWeekendOrFriday;
       }
       if (listFilter === "quorum") {
-        return voterCount > 0;
+        if (isSlotsMode) {
+          return activeSlots.some((s) => {
+            const k = encodeAvailabilityKey(cellDay.dateString, s);
+            return (poll.availability[k] || []).length > 0;
+          });
+        }
+        const voters = poll.availability[cellDay.dateString] || [];
+        return voters.length > 0;
       }
       return true;
     });
-  }, [currentMonthDays, listFilter, poll.availability, todayDateStr]);
+  }, [currentMonthDays, listFilter, poll.availability, todayDateStr, isSlotsMode, activeSlots]);
 
   const totalParticipants = poll.participants.length;
 
-  // Lista de fechas próximas que alcanzaron quórum estricto (100%)
+  // Lista de fechas próximas (o franjas) que alcanzaron quórum estricto (100%)
   const confirmedDates = useMemo(() => {
     if (totalParticipants === 0) return [];
     return Object.entries(poll.availability)
-      .filter(([date, voters]) => date >= todayDateStr && voters && voters.length >= totalParticipants)
-      .map(([date]) => date)
-      .sort();
+      .filter(([key, voters]) => {
+        const { dateStr } = decodeAvailabilityKey(key);
+        return dateStr >= todayDateStr && voters && voters.length >= totalParticipants;
+      })
+      .map(([key]) => key)
+      .sort((a, b) => {
+        const decA = decodeAvailabilityKey(a);
+        const decB = decodeAvailabilityKey(b);
+        if (decA.dateStr !== decB.dateStr) return decA.dateStr.localeCompare(decB.dateStr);
+        return (decA.slotId || "").localeCompare(decB.slotId || "");
+      });
   }, [poll.availability, todayDateStr, totalParticipants]);
 
   // Función para ejecutar el guardado debounced a Supabase
@@ -424,8 +519,12 @@ export default function MonthScheduler({
     }, 350);
   }, [flushPendingSave]);
 
-  // Alternar disponibilidad del jugador actual para una fecha de manera inmediata y fluida
-  const toggleDateAvailability = (dateStr: string, bypassConfirmation: boolean = false) => {
+  // Alternar disponibilidad del jugador actual para una fecha (y franja opcional)
+  const toggleDateAvailability = (
+    dateStr: string,
+    bypassConfirmation: boolean = false,
+    slotId?: SlotId
+  ) => {
     if (dateStr < todayDateStr) {
       return;
     }
@@ -434,22 +533,33 @@ export default function MonthScheduler({
       return;
     }
 
-    // Leemos de availabilityRef.current para garantizar que NUNCA usamos un snapshot desactualizado
+    const key = encodeAvailabilityKey(dateStr, slotId);
     const currentAvailability = availabilityRef.current;
-    const currentVoters = currentAvailability[dateStr] || [];
+    const currentVoters = currentAvailability[key] || [];
     const isCurrentlyAvailable = currentVoters.includes(selectedPlayer);
 
     // Si el jugador ya está disponible y tiene una nota registrada en esta fecha,
-    // interceptamos con un modal de confirmación antes de desmarcar y eliminar la nota
+    // verificamos si al desmarcarse se quedaría sin ninguna otra franja en el día
     if (isCurrentlyAvailable && !bypassConfirmation) {
-      const currentComments = commentsRef.current || {};
-      const userComment = (currentComments[dateStr] || []).find((c) => c.author === selectedPlayer);
-      if (userComment) {
-        setConfirmUnmarkDate({
-          dateStr,
-          commentText: userComment.text,
-        });
-        return;
+      const otherSlotsAvailable = isSlotsMode
+        ? activeSlots.some(
+            (s) =>
+              s !== slotId &&
+              (currentAvailability[encodeAvailabilityKey(dateStr, s)] || []).includes(selectedPlayer)
+          )
+        : false;
+
+      if (!otherSlotsAvailable) {
+        const currentComments = commentsRef.current || {};
+        const userComment = (currentComments[dateStr] || []).find((c) => c.author === selectedPlayer);
+        if (userComment) {
+          setConfirmUnmarkDate({
+            dateStr,
+            slotId,
+            commentText: userComment.text,
+          });
+          return;
+        }
       }
     }
 
@@ -459,7 +569,7 @@ export default function MonthScheduler({
 
     const nextAvailability: AvailabilityMap = {
       ...currentAvailability,
-      [dateStr]: updatedVoters,
+      [key]: updatedVoters,
     };
 
     // 1. Actualizamos la referencia sincrónicamente al instante
@@ -468,17 +578,27 @@ export default function MonthScheduler({
     // 2. Manejo de notas:
     let nextComments: DateCommentsMap = commentsRef.current || {};
     if (isCurrentlyAvailable) {
-      // Si el jugador se desmarca, se elimina automáticamente su nota para ese día
-      const dateComments = nextComments[dateStr] || [];
-      if (dateComments.some((c) => c.author === selectedPlayer)) {
-        nextComments = {
-          ...nextComments,
-          [dateStr]: dateComments.filter((c) => c.author !== selectedPlayer),
-        };
-        commentsRef.current = nextComments;
-      }
-      if (quickNoteDate === dateStr) {
-        setQuickNoteDate(null);
+      // Si el jugador ya no tiene ninguna franja marcada en esta fecha, se limpia su nota
+      const remainingSlotsAvailable = isSlotsMode
+        ? activeSlots.some(
+            (s) =>
+              s !== slotId &&
+              (nextAvailability[encodeAvailabilityKey(dateStr, s)] || []).includes(selectedPlayer)
+          )
+        : false;
+
+      if (!remainingSlotsAvailable) {
+        const dateComments = nextComments[dateStr] || [];
+        if (dateComments.some((c) => c.author === selectedPlayer)) {
+          nextComments = {
+            ...nextComments,
+            [dateStr]: dateComments.filter((c) => c.author !== selectedPlayer),
+          };
+          commentsRef.current = nextComments;
+        }
+        if (quickNoteDate === dateStr) {
+          setQuickNoteDate(null);
+        }
       }
     } else {
       // Si se marca disponible, activamos el aviso de "Añadir nota"
@@ -617,7 +737,10 @@ export default function MonthScheduler({
       confirmedDates,
       currentUrl,
       locale,
-      poll.comments
+      poll.comments,
+      poll.time_mode,
+      poll.default_time || "8:30 PM",
+      poll.time_slots
     );
 
     navigator.clipboard.writeText(summary);
@@ -635,7 +758,7 @@ export default function MonthScheduler({
       alert(t("scheduler.noQuorumDays"));
       return;
     }
-    const icsString = generateIcsContent(poll.title, confirmedDates, locale);
+    const icsString = generateIcsContent(poll.title, confirmedDates, locale, poll.default_time);
     const filename = `dnd-${poll.slug}-sesiones.ics`;
     downloadIcsFile(filename, icsString);
   };
@@ -682,7 +805,12 @@ export default function MonthScheduler({
               </span>
               <span className="text-zinc-500 hidden sm:inline">•</span>
               <span className="text-zinc-300 font-medium">
-                ⏰ {locale === "en" ? "Time:" : "Horario:"} <strong className="text-zinc-100 font-bold">8:30 PM</strong>
+                ⏰ {isSlotsMode ? (locale === "en" ? "Time Slots:" : "Franjas:") : (locale === "en" ? "Time:" : "Horario:")}{" "}
+                <strong className="text-zinc-100 font-bold">
+                  {isSlotsMode
+                    ? activeSlots.map((s) => formatSlotLabel(s, locale)).join(" • ")
+                    : poll.default_time || "8:30 PM"}
+                </strong>
               </span>
               <div className="flex items-center gap-1.5 ml-auto sm:ml-0 liquid-glass-subtle px-3 py-1 rounded-full border border-white/10">
                 <Radio
@@ -739,9 +867,7 @@ export default function MonthScheduler({
 
                 <div className="flex items-center justify-between gap-3 liquid-glass-subtle rounded-2xl px-3.5 py-2.5 border border-white/10">
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-9 h-9 rounded-2xl ios-btn-amber text-zinc-950 font-black flex items-center justify-center text-sm shadow-md flex-shrink-0">
-                      {selectedPlayer.charAt(0).toUpperCase()}
-                    </div>
+                    <PlayerAvatar name={selectedPlayer} isSelected size="md" />
                     <div className="truncate">
                       <span className="text-sm font-black text-zinc-100 truncate block">
                         {selectedPlayer}
@@ -759,9 +885,9 @@ export default function MonthScheduler({
                     </div>
                   </div>
 
-                  <span className="text-[11px] px-2.5 py-0.5 rounded-full ios-btn-emerald text-white font-bold flex-shrink-0 shadow-sm">
+                  <Badge variant="emerald" className="shadow-sm shrink-0">
                     {locale === "en" ? "Voting" : "Votando"}
-                  </span>
+                  </Badge>
                 </div>
 
                 <p className="text-[11px] text-zinc-400 flex items-center gap-1.5 pt-0.5">
@@ -791,15 +917,16 @@ export default function MonthScheduler({
                       {locale === "en" ? "Browse group availability" : "Consulta la disponibilidad general"}
                     </p>
                   </div>
-                  <button
-                    type="button"
+                  <Button
+                    variant="amber"
+                    size="sm"
                     onClick={handleOpenClaimModal}
                     data-testid="claim-character-btn"
                     aria-label={locale === "en" ? "Claim character" : "Elegir personaje"}
-                    className="px-3.5 py-1.5 ios-btn-amber text-zinc-950 rounded-xl text-xs font-black transition-all shadow-sm flex-shrink-0 active:scale-95"
+                    className="shrink-0"
                   >
                     {locale === "en" ? "Claim character" : "Elegir personaje"}
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -833,45 +960,53 @@ export default function MonthScheduler({
                     : `Todos los ${totalParticipants} miembros pueden jugar en: `}
                 </span>
                 <span className="inline-flex flex-wrap items-center gap-1.5 mt-1 sm:mt-0">
-                  {confirmedDates.map((d) => (
-                    <a
-                      key={d}
-                      href={generateGoogleCalendarUrl(poll.title, d, undefined, locale)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title={locale === "en" ? "Click to add to Google Calendar" : "Clic para agendar esta fecha en Google Calendar"}
-                      aria-label={`${locale === "en" ? "Schedule date" : "Agendar fecha"} ${formatFriendlyDate(d, locale)}`}
-                      data-testid={`banner-calendar-link-${d}`}
-                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-100 font-bold text-xs transition-all hover:scale-105 active:scale-95"
-                    >
-                      <span>{formatFriendlyDate(d, locale)}</span>
-                      <CalendarPlus className="w-3 h-3 text-emerald-300" />
-                    </a>
-                  ))}
+                  {confirmedDates.map((key) => {
+                    const { dateStr, slotId } = decodeAvailabilityKey(key);
+                    const slotSuffix = slotId ? ` (${formatSlotLabel(slotId, locale)})` : "";
+                    return (
+                      <a
+                        key={key}
+                        href={generateGoogleCalendarUrl(poll.title, key, undefined, locale, poll.default_time)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={locale === "en" ? "Click to add to Google Calendar" : "Clic para agendar esta fecha en Google Calendar"}
+                        aria-label={`${locale === "en" ? "Schedule date" : "Agendar fecha"} ${formatFriendlyDate(dateStr, locale)}${slotSuffix}`}
+                        data-testid={`banner-calendar-link-${key}`}
+                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-100 font-bold text-xs transition-all hover:scale-105 active:scale-95"
+                      >
+                        <span>{formatFriendlyDate(dateStr, locale)}{slotSuffix}</span>
+                        <CalendarPlus className="w-3 h-3 text-emerald-300" />
+                      </a>
+                    );
+                  })}
                 </span>
               </div>
             </div>
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto">
-            <button
+            <Button
+              variant="emerald"
+              size="sm"
               onClick={handleCopyWhatsApp}
               data-testid="banner-export-whatsapp-btn"
               aria-label={copiedWhatsApp ? t("home.copied") : t("scheduler.whatsAppBtn")}
-              className="flex-1 sm:flex-initial px-3.5 py-2 ios-btn-emerald text-white rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95"
+              icon={<Copy className="w-3.5 h-3.5" />}
+              className="flex-1 sm:flex-initial"
             >
-              <Copy className="w-3.5 h-3.5" />
               {copiedWhatsApp ? t("home.copied") : t("scheduler.whatsAppBtn")}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="subtle"
+              size="sm"
               onClick={handleDownloadIcs}
               data-testid="banner-export-ics-btn"
               aria-label={t("scheduler.downloadIcsBtn")}
-              className="flex-1 sm:flex-initial px-3.5 py-2 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-200 rounded-2xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all border border-white/15 active:scale-95"
+              icon={<Download className="w-3.5 h-3.5" />}
+              className="flex-1 sm:flex-initial"
               title={locale === "en" ? "Download .ics file" : "Descargar archivo .ics"}
             >
-              <Download className="w-3.5 h-3.5" />
               {t("scheduler.downloadIcsBtn")}
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -895,7 +1030,7 @@ export default function MonthScheduler({
             </h2>
 
             {/* Selector de Vista en Mobile (Segmented Control estilo iOS) */}
-            <div className="relative sm:hidden flex items-center gap-1 ios-segmented-control p-1 rounded-2xl">
+            <div className="relative sm:hidden">
               <TutorialCallout
                 stepId="room_views"
                 currentStepNumber={3}
@@ -903,39 +1038,27 @@ export default function MonthScheduler({
                 position="bottom"
                 align="end"
               />
-              <button
-                type="button"
-                onClick={() => {
-                  setViewMode("list");
+              <SegmentedControl
+                value={viewMode}
+                onChange={(val) => {
+                  setViewMode(val as "grid" | "list");
                   completeStep("room_views");
                 }}
-                data-testid="mobile-view-agenda-btn"
-                aria-label={t("scheduler.viewAgenda")}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${
-                  viewMode === "list"
-                    ? "ios-segmented-active"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-                title={t("scheduler.viewAgenda")}
-              >
-                <List className="w-3.5 h-3.5" />
-                <span>{t("scheduler.viewAgenda")}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("grid")}
-                data-testid="mobile-view-month-btn"
-                aria-label={t("scheduler.viewMonth")}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${
-                  viewMode === "grid"
-                    ? "ios-segmented-active"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-                title={t("scheduler.viewMonth")}
-              >
-                <LayoutGrid className="w-3.5 h-3.5" />
-                <span>{t("scheduler.viewMonth")}</span>
-              </button>
+                options={[
+                  {
+                    value: "list",
+                    label: t("scheduler.viewAgenda"),
+                    icon: <List className="w-3.5 h-3.5" />,
+                    testId: "mobile-view-agenda-btn",
+                  },
+                  {
+                    value: "grid",
+                    label: t("scheduler.viewMonth"),
+                    icon: <LayoutGrid className="w-3.5 h-3.5" />,
+                    testId: "mobile-view-month-btn",
+                  },
+                ]}
+              />
             </div>
           </div>
 
@@ -950,7 +1073,7 @@ export default function MonthScheduler({
               <span className="font-medium">{t("scheduler.yourVoteLegend")}</span>
             </div>
 
-            <div className="relative flex items-center gap-1 ios-segmented-control p-1 rounded-2xl ml-2">
+            <div className="relative ml-2">
               <TutorialCallout
                 stepId="room_views"
                 currentStepNumber={3}
@@ -958,40 +1081,27 @@ export default function MonthScheduler({
                 position="bottom"
                 align="end"
               />
-              <button
-                type="button"
-                onClick={() => {
-                  setViewMode("grid");
+              <SegmentedControl
+                value={viewMode}
+                onChange={(val) => {
+                  setViewMode(val as "grid" | "list");
                   completeStep("room_views");
                 }}
-                data-testid="desktop-view-month-btn"
-                aria-label={t("scheduler.viewMonth")}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${
-                  viewMode === "grid"
-                    ? "ios-segmented-active"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-              >
-                <LayoutGrid className="w-3.5 h-3.5" />
-                <span>{t("scheduler.viewMonth")}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setViewMode("list");
-                  completeStep("room_views");
-                }}
-                data-testid="desktop-view-agenda-btn"
-                aria-label={t("scheduler.viewAgenda")}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${
-                  viewMode === "list"
-                    ? "ios-segmented-active"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-              >
-                <List className="w-3.5 h-3.5" />
-                <span>{t("scheduler.viewAgenda")}</span>
-              </button>
+                options={[
+                  {
+                    value: "grid",
+                    label: t("scheduler.viewMonth"),
+                    icon: <LayoutGrid className="w-3.5 h-3.5" />,
+                    testId: "desktop-view-month-btn",
+                  },
+                  {
+                    value: "list",
+                    label: t("scheduler.viewAgenda"),
+                    icon: <List className="w-3.5 h-3.5" />,
+                    testId: "desktop-view-agenda-btn",
+                  },
+                ]}
+              />
             </div>
           </div>
         </div>
@@ -1056,10 +1166,16 @@ export default function MonthScheduler({
               <div className="space-y-2.5 max-h-[460px] sm:max-h-[490px] overflow-y-auto pr-1.5 sm:pr-2 overscroll-auto scroll-smooth">
                 {filteredListDays.map((cellDay) => {
                   const dateKey = cellDay.dateString;
-                  const voters = poll.availability[dateKey] || [];
+                  const voters = isSlotsMode ? [] : (poll.availability[dateKey] || []);
                   const voterCount = voters.length;
-                  const isQuorumReached = voterCount >= totalParticipants && totalParticipants > 0;
-                  const isSelectedPlayerVoted = selectedPlayer ? voters.includes(selectedPlayer) : false;
+                  const isQuorumReached = isSlotsMode
+                    ? activeSlots.some((s) => (poll.availability[encodeAvailabilityKey(dateKey, s)] || []).length >= totalParticipants && totalParticipants > 0)
+                    : voterCount >= totalParticipants && totalParticipants > 0;
+                  const isSelectedPlayerVoted = selectedPlayer
+                    ? isSlotsMode
+                      ? activeSlots.some((s) => (poll.availability[encodeAvailabilityKey(dateKey, s)] || []).includes(selectedPlayer))
+                      : voters.includes(selectedPlayer)
+                    : false;
                   const percentage = totalParticipants > 0 ? (voterCount / totalParticipants) * 100 : 0;
                   const dayOfWeek = cellDay.date.getDay();
                   const isWeekendOrFriday = dayOfWeek === 0 || dayOfWeek === 5 || dayOfWeek === 6;
@@ -1111,88 +1227,121 @@ export default function MonthScheduler({
                               </span>
                             )}
 
-                            {isQuorumReached ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] px-3 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 font-bold animate-pulse shadow-sm">
-                                <Sparkles className="w-3 h-3" />
-                                {t("scheduler.quorumReachedBadge", { voters: voterCount, total: totalParticipants })}
-                              </span>
-                            ) : (
-                              <span
-                                className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold border ${
-                                  voterCount > 0
-                                    ? "liquid-glass-subtle text-zinc-300 border-white/10"
-                                    : "bg-black/20 text-zinc-500 border-white/[0.04]"
-                                }`}
-                              >
-                                {t("scheduler.votersConfirmed", { voters: voterCount, total: totalParticipants })}
-                              </span>
+                            {!isSlotsMode && (
+                              isQuorumReached ? (
+                                <span className="inline-flex items-center gap-1 text-[11px] px-3 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 font-bold animate-pulse shadow-sm">
+                                  <Sparkles className="w-3 h-3" />
+                                  {t("scheduler.quorumReachedBadge", { voters: voterCount, total: totalParticipants })}
+                                </span>
+                              ) : (
+                                <span
+                                  className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold border ${
+                                    voterCount > 0
+                                      ? "liquid-glass-subtle text-zinc-300 border-white/10"
+                                      : "bg-black/20 text-zinc-500 border-white/[0.04]"
+                                  }`}
+                                >
+                                  {t("scheduler.votersConfirmed", { voters: voterCount, total: totalParticipants })}
+                                </span>
+                              )
                             )}
                           </div>
 
-                          {/* Barra de progreso visual */}
-                          <div className="w-full max-w-xs h-1.5 bg-black/30 rounded-full overflow-hidden border border-white/[0.06]">
-                            <div
-                              className={`h-full transition-all duration-300 rounded-full ${
-                                isQuorumReached
-                                  ? "bg-emerald-400"
-                                  : voterCount > 0
-                                  ? "bg-amber-400"
-                                  : "bg-transparent"
-                              }`}
-                              style={{ width: `${percentage}%` }}
-                            />
-                          </div>
-
-                          {/* Nombres directamente visibles */}
-                          {voterCount > 0 ? (
-                            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                              <span className="text-[10px] sm:text-[11px] text-zinc-400 font-medium">
-                                {t("scheduler.availablePlayers")}
-                              </span>
-                              {voters.map((name) => (
-                                <span
-                                  key={name}
-                                  className={`text-[10px] sm:text-[11px] px-2.5 py-0.5 rounded-xl border font-semibold ${
-                                    name === selectedPlayer
-                                      ? "bg-amber-500/20 text-amber-300 border-amber-400/40 font-bold"
-                                      : "liquid-glass-subtle text-zinc-200 border-white/10"
-                                  }`}
-                                >
-                                  ✓ {name}
-                                </span>
-                              ))}
-                              {totalParticipants - voterCount > 0 && (
-                                <span className="text-[10px] sm:text-[11px] text-zinc-500 ml-1">
-                                  ({locale === "en" ? "Missing" : "Faltan"} {totalParticipants - voterCount})
-                                </span>
-                              )}
+                          {/* Modo franjas vs Modo horario único */}
+                          {isSlotsMode ? (
+                            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                              {activeSlots.map((slotId) => {
+                                const slotKey = encodeAvailabilityKey(dateKey, slotId);
+                                const slotVoters = poll.availability[slotKey] || [];
+                                const isSlotQuorum = slotVoters.length >= totalParticipants && totalParticipants > 0;
+                                return (
+                                  <div
+                                    key={slotId}
+                                    className={`flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-xl border ${
+                                      isSlotQuorum
+                                        ? "bg-emerald-500/20 text-emerald-300 border-emerald-400/40"
+                                        : slotVoters.length > 0
+                                        ? "bg-white/10 text-zinc-300 border-white/15"
+                                        : "bg-black/20 text-zinc-500 border-white/[0.04]"
+                                    }`}
+                                  >
+                                    <span className="font-bold">{formatSlotShortLabel(slotId, locale)}:</span>
+                                    <span className="font-semibold">
+                                      {slotVoters.length}/{totalParticipants} {isSlotQuorum && "★"}
+                                    </span>
+                                    {slotVoters.length > 0 && (
+                                      <span className="text-[10px] text-zinc-400 truncate max-w-[130px]">
+                                        ({slotVoters.join(", ")})
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
                           ) : (
-                            <p className="text-[10px] sm:text-[11px] text-zinc-500 italic">
-                              {locale === "en"
-                                ? "No one marked available yet."
-                                : "Nadie ha marcado disponibilidad aún."}
-                            </p>
+                            <>
+                              {/* Barra de progreso visual */}
+                              <div className="w-full max-w-xs h-1.5 bg-black/30 rounded-full overflow-hidden border border-white/[0.06]">
+                                <div
+                                  className={`h-full transition-all duration-300 rounded-full ${
+                                    isQuorumReached
+                                      ? "bg-emerald-400"
+                                      : voterCount > 0
+                                      ? "bg-amber-400"
+                                      : "bg-transparent"
+                                  }`}
+                                  style={{ width: `${percentage}%` }}
+                                />
+                              </div>
+
+                              {/* Nombres directamente visibles */}
+                              {voterCount > 0 ? (
+                                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                                  <span className="text-[10px] sm:text-[11px] text-zinc-400 font-medium">
+                                    {t("scheduler.availablePlayers")}
+                                  </span>
+                                  {voters.map((name) => (
+                                    <span
+                                      key={name}
+                                      className={`text-[10px] sm:text-[11px] px-2.5 py-0.5 rounded-xl border font-semibold ${
+                                        name === selectedPlayer
+                                          ? "bg-amber-500/20 text-amber-300 border-amber-400/40 font-bold"
+                                          : "liquid-glass-subtle text-zinc-200 border-white/10"
+                                      }`}
+                                    >
+                                      ✓ {name}
+                                    </span>
+                                  ))}
+                                  {totalParticipants - voterCount > 0 && (
+                                    <span className="text-[10px] sm:text-[11px] text-zinc-500 ml-1">
+                                      ({locale === "en" ? "Missing" : "Faltan"} {totalParticipants - voterCount})
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <p className="text-[10px] sm:text-[11px] text-zinc-500 italic">
+                                  {locale === "en"
+                                    ? "No one marked available yet."
+                                    : "Nadie ha marcado disponibilidad aún."}
+                                </p>
+                              )}
+                            </>
                           )}
                           {/* Notas registradas en esta fecha */}
                           {(() => {
                             const dateNotes = (poll.comments && poll.comments[dateKey]) || [];
                             if (dateNotes.length === 0) return null;
                             return (
-                              <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-white/[0.04]">
+                              <div className="flex flex-col gap-1.5 pt-1.5 border-t border-white/[0.04] w-full max-w-full">
                                 <span className="inline-flex items-center gap-1 text-[10px] text-amber-400 font-bold uppercase tracking-wider">
                                   <MessageSquare className="w-3 h-3" />
                                   <span>{t("scheduler.dateNotesTitle")}:</span>
                                 </span>
-                                {dateNotes.map((note) => (
-                                  <span
-                                    key={note.id}
-                                    className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] px-2.5 py-0.5 rounded-xl bg-amber-500/10 border border-amber-400/20 text-zinc-200"
-                                  >
-                                    <strong className="text-amber-300 font-bold">{note.author}:</strong>
-                                    <span>&ldquo;{note.text}&rdquo;</span>
-                                  </span>
-                                ))}
+                                <div className="flex flex-col gap-1 w-full">
+                                  {dateNotes.map((note) => (
+                                    <NoteItem key={note.id} note={note} variant="compact" />
+                                  ))}
+                                </div>
                               </div>
                             );
                           })()}
@@ -1202,46 +1351,90 @@ export default function MonthScheduler({
                       {/* Botón de acción táctil estilo iOS */}
                       <div className="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-white/[0.08] justify-end flex-shrink-0">
                         {selectedPlayer ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => toggleDateAvailability(dateKey)}
-                              data-testid={`agenda-toggle-btn-${dateKey}`}
-                              aria-label={`${isSelectedPlayerVoted ? (locale === "en" ? "Unmark availability for" : "Desmarcar disponibilidad para") : (locale === "en" ? "Mark available for" : "Marcar disponible para")} ${formatFriendlyDate(dateKey, locale)}`}
-                              className={`w-full sm:w-auto min-h-[44px] px-5 py-2 rounded-2xl text-xs font-black transition-all shadow-md flex items-center justify-center gap-2 active:scale-95 ${
-                                isSelectedPlayerVoted
-                                  ? "ios-btn-emerald text-white shadow-emerald-950/40"
-                                  : "liquid-glass-subtle hover:bg-white/[0.12] text-zinc-100 border border-white/15"
-                              }`}
-                            >
-                              {isSelectedPlayerVoted ? (
-                                <>
-                                  <Check className="w-4 h-4 stroke-[3]" />
-                                  <span>{locale === "en" ? "Available" : "Disponible"}</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Plus className="w-4 h-4" />
-                                  <span>{locale === "en" ? "Mark available" : "Marcar disponible"}</span>
-                                </>
-                              )}
-                            </button>
+                          isSlotsMode ? (
+                            <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto justify-between sm:justify-end overflow-x-auto no-scrollbar py-0.5">
+                              {activeSlots.map((slotId) => {
+                                const slotKey = encodeAvailabilityKey(dateKey, slotId);
+                                const slotVoters = poll.availability[slotKey] || [];
+                                const isSlotQuorum = slotVoters.length >= totalParticipants && totalParticipants > 0;
+                                const isPlayerInSlot = slotVoters.includes(selectedPlayer);
 
-                            {/* Botón para abrir modal y añadir/editar nota si el día está marcado */}
-                            {isSelectedPlayerVoted && (
+                                return (
+                                  <SlotButton
+                                    key={slotId}
+                                    slotId={slotId}
+                                    isSelected={isPlayerInSlot}
+                                    isQuorum={isSlotQuorum}
+                                    count={slotVoters.length}
+                                    totalParticipants={totalParticipants}
+                                    locale={locale}
+                                    useShortLabel
+                                    showCheckmark
+                                    dataTestId={`agenda-toggle-btn-${dateKey}-${slotId}`}
+                                    ariaLabel={`${formatSlotLabel(slotId, locale)} ${formatFriendlyDate(dateKey, locale)}`}
+                                    onClick={() => toggleDateAvailability(dateKey, false, slotId)}
+                                    className="flex-1 sm:flex-initial shrink-0"
+                                  />
+                                );
+                              })}
+
+                              {/* Botón para abrir modal y añadir/editar nota si el día está marcado en alguna franja */}
+                              {isSelectedPlayerVoted && (
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveDayModal(cellDay)}
+                                  title={t("scheduler.addNoteBtn")}
+                                  data-testid={`agenda-note-btn-${dateKey}`}
+                                  aria-label={`${t("scheduler.addNoteBtn")} ${formatFriendlyDate(dateKey, locale)}`}
+                                  className="min-h-[42px] px-2.5 sm:px-3.5 py-1.5 sm:py-2 liquid-glass-subtle hover:bg-white/[0.12] text-amber-300 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border border-amber-400/30 active:scale-95 shadow-sm shrink-0"
+                                >
+                                  <MessageSquare className="w-4 h-4" />
+                                  <span className="hidden md:inline">{t("scheduler.addNoteBtn")}</span>
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <>
                               <button
                                 type="button"
-                                onClick={() => setActiveDayModal(cellDay)}
-                                title={t("scheduler.addNoteBtn")}
-                                data-testid={`agenda-note-btn-${dateKey}`}
-                                aria-label={`${t("scheduler.addNoteBtn")} ${formatFriendlyDate(dateKey, locale)}`}
-                                className="min-h-[44px] px-3.5 py-2 liquid-glass-subtle hover:bg-white/[0.12] text-amber-300 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border border-amber-400/30 active:scale-95 shadow-sm"
+                                onClick={() => toggleDateAvailability(dateKey)}
+                                data-testid={`agenda-toggle-btn-${dateKey}`}
+                                aria-label={`${isSelectedPlayerVoted ? (locale === "en" ? "Unmark availability for" : "Desmarcar disponibilidad para") : (locale === "en" ? "Mark available for" : "Marcar disponible para")} ${formatFriendlyDate(dateKey, locale)}`}
+                                className={`w-full sm:w-auto min-h-[44px] px-5 py-2 rounded-2xl text-xs font-black transition-all shadow-md flex items-center justify-center gap-2 active:scale-95 ${
+                                  isSelectedPlayerVoted
+                                    ? "ios-btn-emerald text-white shadow-emerald-950/40"
+                                    : "liquid-glass-subtle hover:bg-white/[0.12] text-zinc-100 border border-white/15"
+                                }`}
                               >
-                                <MessageSquare className="w-4 h-4" />
-                                <span className="hidden sm:inline">{t("scheduler.addNoteBtn")}</span>
+                                {isSelectedPlayerVoted ? (
+                                  <>
+                                    <Check className="w-4 h-4 stroke-[3]" />
+                                    <span>{locale === "en" ? "Available" : "Disponible"}</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Plus className="w-4 h-4" />
+                                    <span>{locale === "en" ? "Mark available" : "Marcar disponible"}</span>
+                                  </>
+                                )}
                               </button>
-                            )}
-                          </>
+
+                              {/* Botón para abrir modal y añadir/editar nota si el día está marcado */}
+                              {isSelectedPlayerVoted && (
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveDayModal(cellDay)}
+                                  title={t("scheduler.addNoteBtn")}
+                                  data-testid={`agenda-note-btn-${dateKey}`}
+                                  aria-label={`${t("scheduler.addNoteBtn")} ${formatFriendlyDate(dateKey, locale)}`}
+                                  className="min-h-[44px] px-3.5 py-2 liquid-glass-subtle hover:bg-white/[0.12] text-amber-300 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border border-amber-400/30 active:scale-95 shadow-sm"
+                                >
+                                  <MessageSquare className="w-4 h-4" />
+                                  <span className="hidden sm:inline">{t("scheduler.addNoteBtn")}</span>
+                                </button>
+                              )}
+                            </>
+                          )
                         ) : (
                           <button
                             type="button"
@@ -1300,6 +1493,26 @@ export default function MonthScheduler({
                 const isPastDate = cellDay.dateString < todayDateStr;
                 const colIndex = index % 7;
 
+                // En modo franjas horarias: calcular resumen de franjas para este día
+                const slotSummaryList = isSlotsMode
+                  ? activeSlots.map((sId) => {
+                      const compoundKey = encodeAvailabilityKey(dateKey, sId);
+                      const sVoters = poll.availability[compoundKey] || [];
+                      const sVoted = selectedPlayer ? sVoters.includes(selectedPlayer) : false;
+                      const sQuorum = sVoters.length >= totalParticipants && totalParticipants > 0;
+                      return {
+                        id: sId,
+                        voters: sVoters,
+                        count: sVoters.length,
+                        isVoted: sVoted,
+                        isQuorum: sQuorum,
+                      };
+                    })
+                  : [];
+                const anySlotQuorum = slotSummaryList.some((s) => s.isQuorum);
+                const hasAnySlotVotes = slotSummaryList.some((s) => s.count > 0);
+                const userVotedAnySlot = slotSummaryList.some((s) => s.isVoted);
+
                 let tooltipPositionClass = "left-1/2 -translate-x-1/2";
                 let arrowPositionClass = "left-1/2 -translate-x-1/2";
 
@@ -1322,61 +1535,71 @@ export default function MonthScheduler({
                   );
                 }
 
+                const handleCellClick = () => {
+                  if (isPastDate) return;
+                  if (isSlotsMode) {
+                    setSlotPickerDay(cellDay);
+                  } else if (selectedPlayer) {
+                    toggleDateAvailability(dateKey);
+                  }
+                };
+
+                const cellStateClass = isPastDate
+                  ? "calendar-cell-past"
+                  : (isSlotsMode ? anySlotQuorum : isQuorumReached)
+                  ? `calendar-cell-quorum ${selectedPlayer || isSlotsMode ? "calendar-cell-actionable" : "cursor-default"}`
+                  : (isSlotsMode ? userVotedAnySlot : isSelectedPlayerVoted)
+                  ? `calendar-cell-voted ${selectedPlayer || isSlotsMode ? "calendar-cell-actionable" : "cursor-default"}`
+                  : `calendar-cell-idle ${selectedPlayer || isSlotsMode ? "calendar-cell-actionable" : "cursor-default"}`;
+
+                const dayNumberColor = isPastDate
+                  ? "text-zinc-600"
+                  : (isSlotsMode ? anySlotQuorum : isQuorumReached)
+                  ? "text-emerald-300"
+                  : cellDay.isWeekend
+                  ? "text-amber-300 font-extrabold"
+                  : "text-zinc-200";
+
                 return (
                   <div
                     key={dateKey}
                     data-testid={`day-cell-${dateKey}`}
-                    onClick={
-                      isPastDate || !selectedPlayer
-                        ? undefined
-                        : () => toggleDateAvailability(dateKey)
-                    }
-                    onMouseEnter={() => setHoveredDay(cellDay)}
-                    onMouseLeave={() => setHoveredDay(null)}
+                    onClick={handleCellClick}
+                    onMouseEnter={() => handleCellMouseEnter(cellDay)}
+                    onMouseLeave={handleCellMouseLeave}
                     title={
                       isPastDate
                         ? t("scheduler.pastDateTitle")
+                        : isSlotsMode
+                        ? t("scheduler.slotsPickerTitle")
                         : !selectedPlayer
                         ? undefined
                         : isSelectedPlayerVoted
                         ? t("scheduler.clickToUnmark")
                         : t("scheduler.clickToMark")
                     }
-                    className={`group relative min-h-[72px] sm:min-h-[115px] p-2 sm:p-2.5 rounded-2xl border transition-all duration-200 flex flex-col justify-between select-none ${
+                    className={`calendar-cell group ${cellStateClass} ${
                       hoveredDay?.dateString === dateKey ? "z-40" : "z-10"
-                    } ${
-                      isPastDate
-                        ? "bg-black/25 border-white/[0.04] opacity-35 cursor-not-allowed"
-                        : !selectedPlayer
-                        ? isQuorumReached
-                          ? "bg-emerald-500/[0.14] border-emerald-400/70 cursor-default"
-                          : "liquid-glass-subtle border-white/10 cursor-default"
-                        : isQuorumReached
-                        ? "bg-emerald-500/[0.16] border-emerald-400/70 hover:border-emerald-300 shadow-[0_4px_24px_-4px_rgba(16,185,129,0.35)] cursor-pointer active:scale-95"
-                        : isSelectedPlayerVoted
-                        ? "bg-amber-500/[0.14] border-amber-400/60 hover:border-amber-300 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)] cursor-pointer active:scale-95"
-                        : "liquid-glass-subtle border-white/10 hover:border-white/20 hover:bg-white/[0.08] cursor-pointer active:scale-95"
                     }`}
                   >
-                    {/* Cabecera de celda: Día + Checkbox de usuario */}
+                    {/* Cabecera de celda: Día + Checkbox de usuario (o indicador en slots) */}
                     <div className="flex items-center justify-between">
-                      <span
-                        className={`text-xs sm:text-sm font-black tracking-tight ${
-                          isPastDate
-                            ? "text-zinc-600"
-                            : isQuorumReached
-                            ? "text-emerald-300"
-                            : cellDay.isWeekend
-                            ? "text-amber-300 font-extrabold"
-                            : "text-zinc-200"
-                        }`}
-                      >
+                      <span className={`text-xs sm:text-sm font-black tracking-tight ${dayNumberColor}`}>
                         {cellDay.dayNumber}
                       </span>
 
                       {/* Indicador de si el día es pasado o si el jugador votó */}
                       {isPastDate ? (
                         <span className="text-[9px] sm:text-[10px] text-zinc-600 font-medium">{t("scheduler.pastDate")}</span>
+                      ) : isSlotsMode ? (
+                        userVotedAnySlot && (
+                          <span
+                            title={t("scheduler.slotsPickerTitle")}
+                            className="cell-vote-icon"
+                          >
+                            <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3 stroke-[3]" />
+                          </span>
+                        )
                       ) : (
                         selectedPlayer && (
                           <span
@@ -1385,11 +1608,7 @@ export default function MonthScheduler({
                                 ? t("scheduler.clickToUnmark")
                                 : t("scheduler.clickToMark")
                             }
-                            className={`w-4 h-4 rounded-lg flex items-center justify-center transition-all ${
-                              isSelectedPlayerVoted
-                                ? "ios-btn-amber text-zinc-950 shadow-sm"
-                                : "border border-white/20 group-hover:border-white/40"
-                            }`}
+                            className={isSelectedPlayerVoted ? "cell-vote-icon" : "cell-checkbox-empty group-hover:border-white/40"}
                           >
                             {isSelectedPlayerVoted && <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3 stroke-[3]" />}
                           </span>
@@ -1397,102 +1616,149 @@ export default function MonthScheduler({
                       )}
                     </div>
 
-                    {/* Badge central de Quórum + Indicador de notas */}
-                    <div className="my-auto py-0.5 sm:py-1 flex items-center justify-center gap-1 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActiveDayModal(cellDay);
-                        }}
-                        title={locale === "en" ? "Click to see who voted on this day" : "Clic para ver quiénes votaron este día"}
-                        aria-label={`${locale === "en" ? "View votes for" : "Ver votantes de"} ${formatFriendlyDate(dateKey, locale)}`}
-                        data-testid={`quorum-btn-${dateKey}`}
-                        className="cursor-pointer transition-transform hover:scale-105 active:scale-95 focus:outline-none"
-                      >
-                        {isQuorumReached ? (
-                          <div className="inline-flex items-center gap-1 px-2 sm:px-2.5 py-0.5 rounded-full ios-btn-emerald text-white font-black text-[10px] sm:text-xs shadow-md shadow-emerald-500/30 animate-pulse">
-                            <span>★</span>
-                            <span>
+                    {/* Badge central: Si es slots mode, mostrar mini badges compactos con iconos y botón de notas si existen. Si es single mode, badge tradicional */}
+                    {isSlotsMode ? (
+                      <div className="my-auto py-1 flex flex-col items-center gap-1.5 w-full">
+                        <div className="flex items-center justify-center gap-1 flex-wrap w-full">
+                          {slotSummaryList.map((slot) => (
+                            <SlotBadge
+                              key={slot.id}
+                              slotId={slot.id}
+                              count={slot.count}
+                              totalParticipants={totalParticipants}
+                              isQuorum={slot.isQuorum}
+                              isVoted={slot.isVoted}
+                              locale={locale}
+                              compact
+                            />
+                          ))}
+                        </div>
+
+                        {/* Badge indicador de notas en modo franjas */}
+                        {(() => {
+                          const dateNotes = (poll.comments && poll.comments[dateKey]) || [];
+                          if (dateNotes.length === 0) return null;
+                          return (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveDayModal(cellDay);
+                              }}
+                              title={
+                                locale === "en"
+                                  ? `${dateNotes.length} note(s) on this date`
+                                  : `${dateNotes.length} nota(s) en esta fecha`
+                              }
+                              aria-label={`${locale === "en" ? "View notes for" : "Ver notas de"} ${formatFriendlyDate(dateKey, locale)}`}
+                              data-testid={`notes-btn-${dateKey}`}
+                              className="cell-notes-badge"
+                            >
+                              <MessageSquare className="w-2.5 h-2.5" />
+                              <span>{dateNotes.length}</span>
+                            </button>
+                          );
+                        })()}
+                      </div>
+                    ) : (
+                      <div className="my-auto py-0.5 sm:py-1 flex items-center justify-center gap-1 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveDayModal(cellDay);
+                          }}
+                          title={locale === "en" ? "Click to see who voted on this day" : "Clic para ver quiénes votaron este día"}
+                          aria-label={`${locale === "en" ? "View votes for" : "Ver votantes de"} ${formatFriendlyDate(dateKey, locale)}`}
+                          data-testid={`quorum-btn-${dateKey}`}
+                          className="cursor-pointer transition-transform hover:scale-105 active:scale-95 focus:outline-none"
+                        >
+                          {isQuorumReached ? (
+                            <div className="cell-quorum-pill">
+                              <span>★</span>
+                              <span>
+                                {voterCount}/{totalParticipants}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className={voterCount > 0 ? "cell-votes-pill" : "cell-votes-pill-empty"}>
                               {voterCount}/{totalParticipants}
-                            </span>
-                          </div>
-                        ) : (
+                            </div>
+                          )}
+                        </button>
+
+                        {/* Badge indicador de notas */}
+                        {(() => {
+                          const dateNotes = (poll.comments && poll.comments[dateKey]) || [];
+                          if (dateNotes.length === 0) return null;
+                          return (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveDayModal(cellDay);
+                              }}
+                              title={
+                                locale === "en"
+                                  ? `${dateNotes.length} note(s) on this date`
+                                  : `${dateNotes.length} nota(s) en esta fecha`
+                              }
+                              aria-label={`${locale === "en" ? "View notes for" : "Ver notas de"} ${formatFriendlyDate(dateKey, locale)}`}
+                              data-testid={`notes-btn-${dateKey}`}
+                              className="cell-notes-badge"
+                            >
+                              <MessageSquare className="w-2.5 h-2.5" />
+                              <span>{dateNotes.length}</span>
+                            </button>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    {/* Mini Barra de progreso visual (solo en single mode) */}
+                    {!isSlotsMode && (
+                      <div className="w-full space-y-1">
+                        <div className="cell-progress-track">
                           <div
-                            className={`inline-flex items-center px-2 sm:px-2.5 py-0.5 rounded-full font-bold text-[10px] sm:text-xs transition-colors ${
-                              voterCount > 0
-                                ? "liquid-glass-subtle text-zinc-200 border border-white/15 hover:border-white/30 hover:bg-white/15"
-                                : "bg-black/20 text-zinc-500 border border-white/[0.05] hover:border-white/20 hover:text-zinc-300"
+                            className={`h-full transition-all duration-300 rounded-full ${
+                              isQuorumReached
+                                ? "bg-emerald-400"
+                                : voterCount > 0
+                                ? "bg-amber-400"
+                                : "bg-transparent"
                             }`}
-                          >
-                            {voterCount}/{totalParticipants}
-                          </div>
-                        )}
-                      </button>
+                            style={{ width: `${percentage}%` }}
+                          />
+                        </div>
 
-                      {/* Badge indicador de notas */}
-                      {(() => {
-                        const dateNotes = (poll.comments && poll.comments[dateKey]) || [];
-                        if (dateNotes.length === 0) return null;
-                        return (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveDayModal(cellDay);
-                            }}
-                            title={
-                              locale === "en"
-                                ? `${dateNotes.length} note(s) on this date`
-                                : `${dateNotes.length} nota(s) en esta fecha`
-                            }
-                            aria-label={`${locale === "en" ? "View notes for" : "Ver notas de"} ${formatFriendlyDate(dateKey, locale)}`}
-                            data-testid={`notes-btn-${dateKey}`}
-                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-300 text-[9px] sm:text-[10px] font-bold transition-transform hover:scale-105 active:scale-95 shadow-sm"
-                          >
-                            <MessageSquare className="w-2.5 h-2.5" />
-                            <span>{dateNotes.length}</span>
-                          </button>
-                        );
-                      })()}
-                    </div>
-
-                    {/* Mini Barra de progreso visual */}
-                    <div className="w-full space-y-1">
-                      <div className="w-full h-1 sm:h-1.5 bg-black/30 rounded-full overflow-hidden border border-white/[0.06]">
-                        <div
-                          className={`h-full transition-all duration-300 rounded-full ${
-                            isQuorumReached
-                              ? "bg-emerald-400"
-                              : voterCount > 0
-                              ? "bg-amber-400"
-                              : "bg-transparent"
-                          }`}
-                          style={{ width: `${percentage}%` }}
-                        />
+                        {/* Votantes visibles en pantallas medianas */}
+                        <div className="hidden sm:flex items-center gap-1 overflow-hidden text-[10px] text-zinc-400 truncate">
+                          {voterCount > 0 ? (
+                            <span className="truncate font-medium text-zinc-300">
+                              {voters.slice(0, 2).join(", ")}
+                              {voters.length > 2 && ` +${voters.length - 2}`}
+                            </span>
+                          ) : (
+                            <span className="text-zinc-600 italic">{t("scheduler.noVotes")}</span>
+                          )}
+                        </div>
                       </div>
-
-                      {/* Votantes visibles en pantallas medianas */}
-                      <div className="hidden sm:flex items-center gap-1 overflow-hidden text-[10px] text-zinc-400 truncate">
-                        {voterCount > 0 ? (
-                          <span className="truncate font-medium text-zinc-300">
-                            {voters.slice(0, 2).join(", ")}
-                            {voters.length > 2 && ` +${voters.length - 2}`}
-                          </span>
-                        ) : (
-                          <span className="text-zinc-600 italic">{t("scheduler.noVotes")}</span>
-                        )}
-                      </div>
-                    </div>
+                    )}
 
                     {/* Tooltip flotante al pasar el cursor */}
                     {hoveredDay?.dateString === dateKey && (
                       <div
-                        className={`absolute bottom-full ${tooltipPositionClass} mb-2.5 z-50 w-60 sm:w-64 p-3.5 bg-[#0c0e14]/95 backdrop-blur-2xl rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.85)] pointer-events-none text-left hidden sm:block border border-white/20`}
+                        onMouseEnter={handleTooltipMouseEnter}
+                        onMouseLeave={handleTooltipMouseLeave}
+                        onClick={(e) => e.stopPropagation()}
+                        className={`cell-tooltip bottom-full ${tooltipPositionClass}`}
                       >
+                        {/* Puente invisible para evitar perder el hover al cruzar el margen */}
+                        <div className="absolute -bottom-3 left-0 right-0 h-3" />
+
                         {/* Flecha indicadora apuntando a la celda */}
                         <div
-                          className={`absolute -bottom-1.5 ${arrowPositionClass} w-3 h-3 bg-[#0c0e14] border-r border-b border-white/20 rotate-45 pointer-events-none`}
+                          className={`cell-tooltip-arrow ${arrowPositionClass}`}
                         />
 
                         <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-white/10">
@@ -1513,53 +1779,100 @@ export default function MonthScheduler({
                         </div>
 
                         <div className="space-y-2.5 text-xs">
-                          <div>
-                            <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider mb-1.5 flex items-center justify-between">
-                              <span>{t("scheduler.confirmed", { count: voterCount })}</span>
-                              {isQuorumReached && (
-                                <span className="text-emerald-400 font-bold flex items-center gap-1">
-                                  {locale === "en" ? "★ 100% Quorum" : "★ Quórum 100%"}
-                                </span>
-                              )}
+                          {isSlotsMode ? (
+                            <div className="space-y-2">
+                              {slotSummaryList.map((slot) => {
+                                const slotName = formatSlotLabel(slot.id, locale);
+                                return (
+                                  <div key={slot.id} className="p-2 rounded-xl bg-white/[0.04] border border-white/10 space-y-1">
+                                    <div className="flex items-center justify-between text-[11px] font-bold">
+                                      <span className="text-zinc-200">{slotName}</span>
+                                      <span
+                                        className={`px-1.5 py-0.2 rounded font-mono text-[10px] ${
+                                          slot.isQuorum
+                                            ? "bg-emerald-500/30 text-emerald-300 border border-emerald-400/40"
+                                            : slot.count > 0
+                                            ? "bg-white/10 text-zinc-200"
+                                            : "text-zinc-500"
+                                        }`}
+                                      >
+                                        {slot.isQuorum ? "★ " : ""}
+                                        {slot.count}/{totalParticipants}
+                                      </span>
+                                    </div>
+                                    {slot.voters.length > 0 ? (
+                                      <div className="flex flex-wrap gap-1 pt-0.5">
+                                        {slot.voters.map((name) => (
+                                          <span
+                                            key={name}
+                                            className={`px-1.5 py-0.2 rounded text-[10px] ${
+                                              name === selectedPlayer
+                                                ? "bg-amber-500/25 text-amber-200 border border-amber-400/40"
+                                                : "bg-emerald-500/15 text-emerald-200 border border-emerald-400/30"
+                                            }`}
+                                          >
+                                            {name}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className="text-[10px] text-zinc-500 italic">{t("scheduler.noOneConfirmed")}</p>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
-                            {voterCount > 0 ? (
-                              <div className="flex flex-wrap gap-1.5">
-                                {voters.map((name) => (
-                                  <span
-                                    key={name}
-                                    className={`px-2.5 py-0.5 rounded-lg text-[11px] font-semibold border ${
-                                      name === selectedPlayer
-                                        ? "bg-amber-500/25 text-amber-200 border-amber-400/50 shadow-sm"
-                                        : "bg-emerald-500/20 text-emerald-200 border-emerald-400/40"
-                                    }`}
-                                  >
-                                    {name}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-zinc-500 italic text-[11px]">{t("scheduler.noOneConfirmed")}</p>
-                            )}
-                          </div>
-
-                          {totalParticipants - voterCount > 0 && (
-                            <div className="pt-1 border-t border-white/[0.06]">
-                              <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1.5">
-                                {t("scheduler.missing", { count: totalParticipants - voterCount })}
-                              </div>
-                              <div className="flex flex-wrap gap-1.5">
-                                {poll.participants
-                                  .filter((p) => !voters.includes(p))
-                                  .map((name) => (
-                                    <span
-                                      key={name}
-                                      className="px-2 py-0.5 rounded-lg bg-zinc-900/90 text-zinc-400 text-[11px] font-medium border border-white/[0.08]"
-                                    >
-                                      {name}
+                          ) : (
+                            <>
+                              <div>
+                                <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                                  <span>{t("scheduler.confirmed", { count: voterCount })}</span>
+                                  {isQuorumReached && (
+                                    <span className="text-emerald-400 font-bold flex items-center gap-1">
+                                      {locale === "en" ? "★ 100% Quorum" : "★ Quórum 100%"}
                                     </span>
-                                  ))}
+                                  )}
+                                </div>
+                                {voterCount > 0 ? (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {voters.map((name) => (
+                                      <span
+                                        key={name}
+                                        className={`px-2.5 py-0.5 rounded-lg text-[11px] font-semibold border ${
+                                          name === selectedPlayer
+                                            ? "bg-amber-500/25 text-amber-200 border-amber-400/50 shadow-sm"
+                                            : "bg-emerald-500/20 text-emerald-200 border-emerald-400/40"
+                                        }`}
+                                      >
+                                        {name}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-zinc-500 italic text-[11px]">{t("scheduler.noOneConfirmed")}</p>
+                                )}
                               </div>
-                            </div>
+
+                              {totalParticipants - voterCount > 0 && (
+                                <div className="pt-1 border-t border-white/[0.06]">
+                                  <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1.5">
+                                    {t("scheduler.missing", { count: totalParticipants - voterCount })}
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {poll.participants
+                                      .filter((p) => !voters.includes(p))
+                                      .map((name) => (
+                                        <span
+                                          key={name}
+                                          className="px-2 py-0.5 rounded-lg bg-zinc-900/90 text-zinc-400 text-[11px] font-medium border border-white/[0.08]"
+                                        >
+                                          {name}
+                                        </span>
+                                      ))}
+                                  </div>
+                                </div>
+                              )}
+                            </>
                           )}
 
                           {/* Notas registradas en este día */}
@@ -1574,10 +1887,7 @@ export default function MonthScheduler({
                                 </div>
                                 <div className="space-y-1 max-h-24 overflow-y-auto">
                                   {dateNotes.map((note) => (
-                                    <div key={note.id} className="text-[11px] bg-white/5 rounded-lg p-1.5 border border-white/10">
-                                      <span className="font-bold text-amber-300">{note.author}: </span>
-                                      <span className="text-zinc-200">&ldquo;{note.text}&rdquo;</span>
-                                    </div>
+                                    <NoteItem key={note.id} note={note} variant="tooltip" />
                                   ))}
                                 </div>
                               </div>
@@ -1638,19 +1948,35 @@ export default function MonthScheduler({
               {t("scheduler.googleCalBtn")}
             </button>
           ) : confirmedDates.length === 1 ? (
-            <a
-              href={generateGoogleCalendarUrl(poll.title, confirmedDates[0], undefined, locale)}
-              target="_blank"
-              rel="noopener noreferrer"
-              data-testid="export-google-cal-btn"
-              aria-label={`${t("scheduler.googleCalBtn")} ${formatFriendlyDate(confirmedDates[0], locale)}`}
-              className="flex-1 sm:flex-initial px-4 py-2.5 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-100 rounded-2xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all border border-white/15 active:scale-95 shadow-sm"
-              title={t("scheduler.scheduleDate", { date: formatFriendlyDate(confirmedDates[0], locale) })}
-            >
-              <CalendarPlus className="w-4 h-4 text-blue-400" />
-              <span>{t("scheduler.googleCalBtn")}</span>
-              <ExternalLink className="w-3 h-3 text-zinc-400" />
-            </a>
+            (() => {
+              const singleKey = confirmedDates[0];
+              const { dateStr: singleDate, slotId: singleSlot } = decodeAvailabilityKey(singleKey);
+              const singleUrl = generateGoogleCalendarUrl(
+                poll.title,
+                singleKey,
+                undefined,
+                locale,
+                poll.default_time
+              );
+              const slotSuffix = singleSlot ? ` (${formatSlotLabel(singleSlot, locale)})` : "";
+              const displayDate = `${formatFriendlyDate(singleDate, locale)}${slotSuffix}`;
+
+              return (
+                <a
+                  href={singleUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="export-google-cal-btn"
+                  aria-label={`${t("scheduler.googleCalBtn")} ${displayDate}`}
+                  className="flex-1 sm:flex-initial px-4 py-2.5 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-100 rounded-2xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all border border-white/15 active:scale-95 shadow-sm"
+                  title={t("scheduler.scheduleDate", { date: displayDate })}
+                >
+                  <CalendarPlus className="w-4 h-4 text-blue-400" />
+                  <span>{t("scheduler.googleCalBtn")}</span>
+                  <ExternalLink className="w-3 h-3 text-zinc-400" />
+                </a>
+              );
+            })()
           ) : (
             <div className="relative flex-1 sm:flex-initial" ref={googleDropdownRef}>
               <button
@@ -1679,31 +2005,49 @@ export default function MonthScheduler({
                   </div>
 
                   <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                    {confirmedDates.map((date) => (
-                      <a
-                        key={date}
-                        href={generateGoogleCalendarUrl(poll.title, date, undefined, locale)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() => setShowGoogleDropdown(false)}
-                        className="flex items-center justify-between p-2.5 rounded-2xl liquid-glass-subtle hover:bg-white/[0.12] border border-white/10 hover:border-blue-400/50 transition-all text-xs text-zinc-200 group active:scale-95"
-                      >
-                        <span className="font-bold text-zinc-200 group-hover:text-white">
-                          {formatFriendlyDate(date, locale)}
-                        </span>
-                        <span className="flex items-center gap-1 text-[11px] text-blue-400 font-bold">
-                          {t("scheduler.openExternal")} <ExternalLink className="w-3 h-3" />
-                        </span>
-                      </a>
-                    ))}
+                    {confirmedDates.map((itemKey) => {
+                      const { dateStr: iDate, slotId: iSlot } = decodeAvailabilityKey(itemKey);
+                      const iUrl = generateGoogleCalendarUrl(
+                        poll.title,
+                        itemKey,
+                        undefined,
+                        locale,
+                        poll.default_time
+                      );
+                      const slotSuffix = iSlot ? ` (${formatSlotLabel(iSlot, locale)})` : "";
+                      return (
+                        <a
+                          key={itemKey}
+                          href={iUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => setShowGoogleDropdown(false)}
+                          className="flex items-center justify-between p-2.5 rounded-2xl liquid-glass-subtle hover:bg-white/[0.12] border border-white/10 hover:border-blue-400/50 transition-all text-xs text-zinc-200 group active:scale-95"
+                        >
+                          <span className="font-bold text-zinc-200 group-hover:text-white truncate">
+                            {formatFriendlyDate(iDate, locale)}{slotSuffix}
+                          </span>
+                          <span className="flex items-center gap-1 text-[11px] text-blue-400 font-bold shrink-0 ml-2">
+                            {t("scheduler.openExternal")} <ExternalLink className="w-3 h-3" />
+                          </span>
+                        </a>
+                      );
+                    })}
                   </div>
 
                   <div className="pt-2 border-t border-white/10 space-y-1.5">
                     <button
                       type="button"
                       onClick={() => {
-                        confirmedDates.forEach((date) => {
-                          window.open(generateGoogleCalendarUrl(poll.title, date, undefined, locale), "_blank");
+                        confirmedDates.forEach((itemKey) => {
+                          const iUrl = generateGoogleCalendarUrl(
+                            poll.title,
+                            itemKey,
+                            undefined,
+                            locale,
+                            poll.default_time
+                          );
+                          window.open(iUrl, "_blank");
                         });
                         setShowGoogleDropdown(false);
                       }}
@@ -1744,47 +2088,226 @@ export default function MonthScheduler({
       </div>
 
       {/* Modal de Detalle de Día estilo iOS Sheet */}
-      {activeDayModal && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setActiveDayModal(null);
-            }
-          }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-xl animate-in fade-in duration-200 cursor-pointer"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="day-detail-title"
-          data-testid="day-detail-modal"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-md liquid-glass-elevated rounded-3xl p-6 sm:p-7 shadow-2xl space-y-5 cursor-default overflow-hidden"
-          >
-            {/* iOS Sheet Grab Indicator */}
-            <div className="w-10 h-1 bg-white/25 rounded-full mx-auto -mt-1 mb-2" />
-
-            <button
-              onClick={() => setActiveDayModal(null)}
-              className="absolute top-5 right-5 p-2 text-zinc-400 hover:text-white rounded-2xl hover:bg-white/10 transition-colors"
-              title={t("common.close")}
-              aria-label={t("common.close")}
-              data-testid="day-detail-close-btn"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div>
-              <div className="text-[11px] font-bold text-amber-300 uppercase tracking-wider">
-                {t("scheduler.dayDetailHeader")}
-              </div>
-              <h3 id="day-detail-title" className="text-xl font-black text-zinc-100 tracking-tight mt-1">
-                {formatFriendlyDate(activeDayModal.dateString, locale)}
-              </h3>
-            </div>
-
+      <Modal
+        isOpen={Boolean(activeDayModal)}
+        onClose={() => setActiveDayModal(null)}
+        testId="day-detail-modal"
+        maxWidthClass="max-w-md"
+        badge={
+          <div className="text-[11px] font-bold text-amber-300 uppercase tracking-wider">
+            {t("scheduler.dayDetailHeader")}
+          </div>
+        }
+        title={activeDayModal ? formatFriendlyDate(activeDayModal.dateString, locale) : ""}
+      >
+        {activeDayModal && (
+          <>
             {/* Votantes */}
             {(() => {
+              if (isSlotsMode) {
+                const slotsData = activeSlots.map((sId) => {
+                  const compoundKey = encodeAvailabilityKey(activeDayModal.dateString, sId);
+                  const sVoters = poll.availability[compoundKey] || [];
+                  const sCount = sVoters.length;
+                  const sQuorum = sCount >= totalParticipants && totalParticipants > 0;
+                  const sMissing = poll.participants.filter((p) => !sVoters.includes(p));
+                  const sVoted = selectedPlayer ? sVoters.includes(selectedPlayer) : false;
+                  return {
+                    id: sId,
+                    voters: sVoters,
+                    count: sCount,
+                    isQuorum: sQuorum,
+                    missing: sMissing,
+                    isVoted: sVoted,
+                  };
+                });
+
+                return (
+                  <div className="space-y-4 text-xs">
+                    {/* Lista de franjas horarias con su quórum y votantes */}
+                    <div className="space-y-3">
+                      {slotsData.map((slot) => {
+                        const slotName = formatSlotLabel(slot.id, locale);
+                        return (
+                          <div
+                            key={slot.id}
+                            className={`p-3.5 rounded-2xl border space-y-2.5 transition-all ${
+                              slot.isQuorum
+                                ? "bg-emerald-500/10 border-emerald-400/40 shadow-sm"
+                                : "liquid-glass-subtle border-white/10"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-black text-sm text-zinc-100">{slotName}</span>
+                              <SlotBadge
+                                slotId={slot.id}
+                                count={slot.count}
+                                totalParticipants={totalParticipants}
+                                isQuorum={slot.isQuorum}
+                                compact={false}
+                              />
+                            </div>
+
+                            {/* Votantes de esta franja */}
+                            {slot.count > 0 ? (
+                              <div className="flex flex-wrap gap-1.5">
+                                {slot.voters.map((name) => (
+                                  <span
+                                    key={name}
+                                    className="px-2.5 py-0.5 rounded-lg bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 font-semibold text-[11px]"
+                                  >
+                                    ✓ {name}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-zinc-500 italic text-[11px]">{t("scheduler.noOneConfirmed")}</p>
+                            )}
+
+                            {/* Botón para marcar/desmarcar esta franja específica si hay jugador */}
+                            {selectedPlayer && activeDayModal.dateString >= todayDateStr && (
+                              <div className="pt-1 border-t border-white/[0.06]">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleDateAvailability(activeDayModal.dateString, undefined, slot.id)}
+                                  data-testid={`modal-slot-toggle-${slot.id}`}
+                                  className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95 ${
+                                    slot.isVoted
+                                      ? "ios-btn-emerald text-white shadow-emerald-950/40"
+                                      : "liquid-glass-subtle hover:bg-white/[0.12] text-zinc-200 border border-white/15"
+                                  }`}
+                                >
+                                  {slot.isVoted ? (
+                                    <>
+                                      <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                      <span>{locale === "en" ? "Available" : "Disponible"}</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Plus className="w-3.5 h-3.5" />
+                                      <span>{locale === "en" ? "Mark available" : "Marcar disponible"}</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Sección: Notas de la fecha */}
+                    <div className="space-y-2.5 pt-2 border-t border-white/10">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-zinc-300 uppercase tracking-wider block text-[10px] flex items-center gap-1.5">
+                          <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
+                          <span>{t("scheduler.dateNotesTitle")}</span>
+                        </span>
+                        {(() => {
+                          const dateNotes = (poll.comments && poll.comments[activeDayModal.dateString]) || [];
+                          if (dateNotes.length === 0) return null;
+                          return (
+                            <span className="text-[10px] text-amber-400 font-bold px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-400/20">
+                              {dateNotes.length === 1
+                                ? t("scheduler.oneNoteBadge")
+                                : t("scheduler.notesCountBadge", { count: dateNotes.length })}
+                            </span>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Lista de notas existentes */}
+                      {(() => {
+                        const dateNotes = (poll.comments && poll.comments[activeDayModal.dateString]) || [];
+                        if (dateNotes.length === 0) {
+                          return (
+                            <p className="text-zinc-500 italic text-xs py-1">
+                              {t("scheduler.noDateNotes")}
+                            </p>
+                          );
+                        }
+                        return (
+                          <div className="space-y-2 max-h-44 overflow-y-auto pr-0.5">
+                            {dateNotes.map((note) => {
+                              const isMyNote = selectedPlayer === note.author;
+                              return (
+                                <NoteItem
+                                  key={note.id}
+                                  note={note}
+                                  isMyNote={isMyNote}
+                                  locale={locale}
+                                  formattedTime={formatCommentTime(note.createdAt, locale)}
+                                  onEdit={() => {
+                                    setCommentInput(note.text);
+                                    setIsEditingComment(true);
+                                  }}
+                                  onDelete={() => handleDeleteComment(activeDayModal.dateString, note.id)}
+                                  editLabel={t("scheduler.editNoteBtn")}
+                                  deleteLabel={t("scheduler.deleteNoteBtn")}
+                                  youLabel={locale === "en" ? "You" : "Tú"}
+                                />
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+
+                      {/* Formulario para agregar / editar nota */}
+                      {selectedPlayer && activeDayModal.dateString >= todayDateStr ? (
+                        <div className="pt-2 space-y-2">
+                          <div className="relative">
+                            <textarea
+                              id="date-comment-input"
+                              data-testid="date-comment-input"
+                              aria-label={t("scheduler.notePlaceholder")}
+                              value={commentInput}
+                              onChange={(e) => setCommentInput(e.target.value.slice(0, 140))}
+                              placeholder={t("scheduler.notePlaceholder")}
+                              maxLength={140}
+                              rows={2}
+                              className="w-full text-xs p-3 rounded-2xl bg-black/40 border border-white/15 text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-amber-400/60 focus:ring-1 focus:ring-amber-400/40 resize-none transition-colors"
+                            />
+                            <div className="absolute right-2.5 bottom-2 text-[10px] font-medium text-zinc-500 pointer-events-none">
+                              {commentInput.length}/140
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-end gap-2">
+                            {isEditingComment && (
+                              <Button
+                                variant="subtle"
+                                size="sm"
+                                onClick={() => {
+                                  setIsEditingComment(false);
+                                  const currentComments = poll.comments?.[activeDayModal.dateString] || [];
+                                  const existing = currentComments.find((c) => c.author === selectedPlayer);
+                                  setCommentInput(existing ? existing.text : "");
+                                }}
+                                data-testid="cancel-note-btn"
+                                aria-label={t("scheduler.cancelNoteBtn")}
+                              >
+                                {t("scheduler.cancelNoteBtn")}
+                              </Button>
+                            )}
+                            <Button
+                              variant="amber"
+                              size="sm"
+                              disabled={!commentInput.trim() || isSavingComment}
+                              onClick={() => handleSaveComment(activeDayModal.dateString, commentInput)}
+                              data-testid="save-note-btn"
+                              aria-label={t("scheduler.saveNoteBtn")}
+                              icon={isSavingComment ? <Loader2 className="w-3 h-3 animate-spin" /> : undefined}
+                            >
+                              {t("scheduler.saveNoteBtn")}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              }
+
               const voters = poll.availability[activeDayModal.dateString] || [];
               const voterCount = voters.length;
               const isQuorum = voterCount >= totalParticipants && totalParticipants > 0;
@@ -1882,67 +2405,21 @@ export default function MonthScheduler({
                           {dateNotes.map((note) => {
                             const isMyNote = selectedPlayer === note.author;
                             return (
-                              <div
+                              <NoteItem
                                 key={note.id}
-                                data-testid={`note-item-${note.id}`}
-                                className={`p-2.5 rounded-2xl border text-xs space-y-1 transition-colors ${
-                                  isMyNote
-                                    ? "bg-amber-500/10 border-amber-400/30 text-zinc-100"
-                                    : "liquid-glass-subtle border-white/10 text-zinc-300"
-                                }`}
-                              >
-                                <div className="flex items-center justify-between text-[10px]">
-                                  <div className="flex items-center gap-1.5">
-                                    <span
-                                      className={`font-black ${
-                                        isMyNote ? "text-amber-300" : "text-zinc-200"
-                                      }`}
-                                    >
-                                      {note.author}
-                                    </span>
-                                    {isMyNote && (
-                                      <span className="px-1.5 py-0.2 rounded-md bg-amber-400/20 text-amber-300 font-bold text-[9px]">
-                                        {locale === "en" ? "You" : "Tú"}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-zinc-500 text-[10px]">
-                                      {formatCommentTime(note.createdAt, locale)}
-                                    </span>
-                                    {isMyNote && (
-                                      <div className="flex items-center gap-1">
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setCommentInput(note.text);
-                                            setIsEditingComment(true);
-                                          }}
-                                          title={t("scheduler.editNoteBtn")}
-                                          aria-label={t("scheduler.editNoteBtn")}
-                                          data-testid={`note-edit-btn-${note.id}`}
-                                          className="p-1 hover:text-amber-300 text-zinc-400 transition-colors"
-                                        >
-                                          <Edit3 className="w-3 h-3" />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleDeleteComment(activeDayModal.dateString, note.id)}
-                                          title={t("scheduler.deleteNoteBtn")}
-                                          aria-label={t("scheduler.deleteNoteBtn")}
-                                          data-testid={`note-delete-btn-${note.id}`}
-                                          className="p-1 hover:text-red-400 text-zinc-400 transition-colors"
-                                        >
-                                          <Trash2 className="w-3 h-3" />
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                                <p className="text-zinc-200 text-xs leading-relaxed break-words font-medium">
-                                  &ldquo;{note.text}&rdquo;
-                                </p>
-                              </div>
+                                note={note}
+                                isMyNote={isMyNote}
+                                locale={locale}
+                                formattedTime={formatCommentTime(note.createdAt, locale)}
+                                onEdit={() => {
+                                  setCommentInput(note.text);
+                                  setIsEditingComment(true);
+                                }}
+                                onDelete={() => handleDeleteComment(activeDayModal.dateString, note.id)}
+                                editLabel={t("scheduler.editNoteBtn")}
+                                deleteLabel={t("scheduler.deleteNoteBtn")}
+                                youLabel={locale === "en" ? "You" : "Tú"}
+                              />
                             );
                           })}
                         </div>
@@ -1971,8 +2448,9 @@ export default function MonthScheduler({
 
                         <div className="flex items-center justify-end gap-2">
                           {isEditingComment && (
-                            <button
-                              type="button"
+                            <Button
+                              variant="subtle"
+                              size="sm"
                               onClick={() => {
                                 setIsEditingComment(false);
                                 const currentComments = poll.comments?.[activeDayModal.dateString] || [];
@@ -1981,22 +2459,21 @@ export default function MonthScheduler({
                               }}
                               data-testid="cancel-note-btn"
                               aria-label={t("scheduler.cancelNoteBtn")}
-                              className="px-3 py-1.5 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white liquid-glass-subtle border border-white/10 transition-colors"
                             >
                               {t("scheduler.cancelNoteBtn")}
-                            </button>
+                            </Button>
                           )}
-                          <button
-                            type="button"
+                          <Button
+                            variant="amber"
+                            size="sm"
                             disabled={!commentInput.trim() || isSavingComment}
                             onClick={() => handleSaveComment(activeDayModal.dateString, commentInput)}
                             data-testid="save-note-btn"
                             aria-label={t("scheduler.saveNoteBtn")}
-                            className="px-4 py-1.5 rounded-xl text-xs font-black ios-btn-amber text-zinc-950 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm transition-all flex items-center gap-1.5"
+                            icon={isSavingComment ? <Loader2 className="w-3 h-3 animate-spin" /> : undefined}
                           >
-                            {isSavingComment && <Loader2 className="w-3 h-3 animate-spin" />}
-                            <span>{t("scheduler.saveNoteBtn")}</span>
-                          </button>
+                            {t("scheduler.saveNoteBtn")}
+                          </Button>
                         </div>
                       </div>
                     ) : selectedPlayer && !voters.includes(selectedPlayer) && activeDayModal.dateString >= todayDateStr ? (
@@ -2009,39 +2486,33 @@ export default function MonthScheduler({
                   {/* Si el usuario tiene personaje seleccionado y el día no ha pasado, botón directo de votar */}
                   {selectedPlayer && activeDayModal.dateString >= todayDateStr && (
                     <div className="pt-3 border-t border-white/10">
-                      <button
-                        type="button"
+                      <Button
+                        variant={voters.includes(selectedPlayer) ? "danger" : "amber"}
+                        fullWidth
+                        size="lg"
                         onClick={() => {
                           toggleDateAvailability(activeDayModal.dateString);
                         }}
                         data-testid="modal-toggle-vote-btn"
                         aria-label={voters.includes(selectedPlayer) ? t("scheduler.removeMyAvailability") : t("scheduler.markMeAvailable")}
-                        className={`w-full py-3 px-4 rounded-2xl text-xs font-black transition-all shadow-md flex items-center justify-center gap-2 active:scale-95 ${
-                          voters.includes(selectedPlayer)
-                            ? "bg-red-500/20 hover:bg-red-500/30 border border-red-400/40 text-red-200"
-                            : "ios-btn-amber text-zinc-950"
-                        }`}
-                      >
-                        {voters.includes(selectedPlayer) ? (
-                          <>
+                        icon={
+                          voters.includes(selectedPlayer) ? (
                             <X className="w-4 h-4" />
-                            {t("scheduler.removeMyAvailability")}
-                          </>
-                        ) : (
-                          <>
+                          ) : (
                             <Check className="w-4 h-4 stroke-[3]" />
-                            {t("scheduler.markMeAvailable")}
-                          </>
-                        )}
-                      </button>
+                          )
+                        }
+                      >
+                        {voters.includes(selectedPlayer) ? t("scheduler.removeMyAvailability") : t("scheduler.markMeAvailable")}
+                      </Button>
                     </div>
                   )}
                 </div>
               );
             })()}
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
 
       {/* Toast rápido al marcar disponibilidad: "Añadir nota" */}
       {quickNoteDate && (
@@ -2084,23 +2555,14 @@ export default function MonthScheduler({
       )}
 
       {/* Modal de confirmación para desmarcar fecha con nota */}
-      {confirmUnmarkDate && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setConfirmUnmarkDate(null);
-            }
-          }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xl animate-in fade-in duration-200 cursor-pointer"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="confirm-unmark-title"
-          data-testid="confirm-unmark-modal"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-sm liquid-glass-elevated rounded-3xl p-6 shadow-2xl space-y-4 border border-amber-400/30 cursor-default"
-          >
+      <Modal
+        isOpen={Boolean(confirmUnmarkDate)}
+        onClose={() => setConfirmUnmarkDate(null)}
+        testId="confirm-unmark-modal"
+        maxWidthClass="max-w-sm"
+      >
+        {confirmUnmarkDate && (
+          <div className="space-y-4">
             <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto border border-amber-400/30">
               <MessageSquare className="w-6 h-6" />
             </div>
@@ -2124,17 +2586,18 @@ export default function MonthScheduler({
             </div>
 
             <div className="flex items-center gap-2 pt-2">
-              <button
-                type="button"
+              <Button
+                variant="subtle"
+                fullWidth
                 onClick={() => setConfirmUnmarkDate(null)}
                 data-testid="confirm-unmark-cancel-btn"
                 aria-label={t("common.cancel")}
-                className="flex-1 py-2.5 rounded-2xl text-xs font-semibold text-zinc-300 hover:text-white liquid-glass-subtle border border-white/10 transition-all active:scale-95"
               >
                 {t("common.cancel")}
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="danger"
+                fullWidth
                 onClick={() => {
                   const targetDate = confirmUnmarkDate.dateStr;
                   setConfirmUnmarkDate(null);
@@ -2142,14 +2605,98 @@ export default function MonthScheduler({
                 }}
                 data-testid="confirm-unmark-confirm-btn"
                 aria-label={t("scheduler.confirmUnmarkBtn")}
-                className="flex-1 py-2.5 rounded-2xl text-xs font-black bg-red-500 hover:bg-red-600 text-white shadow-md shadow-red-950/40 transition-all active:scale-95"
               >
                 {t("scheduler.confirmUnmarkBtn")}
-              </button>
+              </Button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
+
+      {/* Modal / Bottom Sheet compacto para seleccionar Franjas Horarias de un día */}
+      <Modal
+        isOpen={Boolean(slotPickerDay)}
+        onClose={() => setSlotPickerDay(null)}
+        testId="slot-picker-modal"
+        maxWidthClass="max-w-md"
+        badge={
+          <div className="text-[11px] font-bold text-amber-300 uppercase tracking-wider">
+            {t("scheduler.dayDetailHeader")}
+          </div>
+        }
+        title={slotPickerDay ? formatFriendlyDate(slotPickerDay.dateString, locale) : ""}
+        subtitle={t("scheduler.selectSlotsDesc")}
+      >
+        {slotPickerDay && (
+          <div className="space-y-4">
+            {/* Selector de franjas con píldoras interactivas */}
+            <div className="space-y-2.5 pt-1">
+              {activeSlots.map((sId) => {
+                const compoundKey = encodeAvailabilityKey(slotPickerDay.dateString, sId);
+                const voters = poll.availability[compoundKey] || [];
+                const isSelected = selectedPlayer ? voters.includes(selectedPlayer) : false;
+                const isQuorum = voters.length >= totalParticipants && totalParticipants > 0;
+                const slotName = formatSlotLabel(sId, locale);
+
+                return (
+                  <div
+                    key={sId}
+                    className="flex items-center justify-between p-3 rounded-2xl liquid-glass-subtle border border-white/10"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs sm:text-sm font-bold text-zinc-100">{slotName}</span>
+                        {isQuorum && (
+                          <Badge variant="emerald">
+                            ★ 100%
+                          </Badge>
+                        )}
+                      </div>
+                      <span className="text-[11px] text-zinc-400">
+                        {t("scheduler.votersConfirmed", { voters: voters.length, total: totalParticipants })}
+                      </span>
+                    </div>
+
+                    {selectedPlayer ? (
+                      <Button
+                        variant={isSelected ? "emerald" : "subtle"}
+                        size="sm"
+                        onClick={() => toggleDateAvailability(slotPickerDay.dateString, undefined, sId)}
+                        data-testid={`slot-picker-btn-${sId}`}
+                        aria-pressed={isSelected}
+                        icon={isSelected ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : <Plus className="w-3.5 h-3.5" />}
+                      >
+                        {isSelected ? (locale === "en" ? "Available" : "Disponible") : (locale === "en" ? "Mark" : "Marcar")}
+                      </Button>
+                    ) : (
+                      <span className="text-[11px] text-zinc-500 italic">
+                        {voters.length > 0 ? voters.join(", ") : t("scheduler.noVotes")}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Botón para ver detalle completo o notas del día */}
+            <div className="pt-2 flex items-center justify-between gap-2 border-t border-white/10">
+              <Button
+                variant="subtle"
+                fullWidth
+                onClick={() => {
+                  const target = slotPickerDay;
+                  setSlotPickerDay(null);
+                  setActiveDayModal(target);
+                }}
+                data-testid="slot-picker-see-details-btn"
+                icon={<Eye className="w-4 h-4" />}
+              >
+                {t("scheduler.seeDetail")}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Modal de Reclamo de Personaje */}
       <ClaimCharacterModal

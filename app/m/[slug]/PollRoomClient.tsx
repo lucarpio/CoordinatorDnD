@@ -6,6 +6,7 @@ import { supabase, Poll, AvailabilityMap, DateCommentsMap } from "@/lib/supabase
 import MonthScheduler from "@/components/MonthScheduler";
 import { AlertCircle, ArrowLeft, Loader2 } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
+import Button from "@/components/ui/Button";
 
 interface PollRoomClientProps {
   slug: string;
@@ -167,15 +168,15 @@ export default function PollRoomClient({ slug }: PollRoomClientProps) {
               ? "The link does not match any active coordination table."
               : "El enlace ingresado no corresponde a ninguna encuesta activa.")}
         </p>
-        <button
+        <Button
+          variant="amber"
           onClick={() => router.push("/")}
           data-testid="error-back-home-btn"
           aria-label={t("common.back")}
-          className="inline-flex items-center gap-2 px-5 py-2.5 ios-btn-amber text-zinc-950 rounded-2xl text-xs font-black transition-all active:scale-95 shadow-md"
+          icon={<ArrowLeft className="w-3.5 h-3.5" />}
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
           {t("common.back")}
-        </button>
+        </Button>
       </div>
     );
   }
@@ -183,15 +184,16 @@ export default function PollRoomClient({ slug }: PollRoomClientProps) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <button
+        <Button
+          variant="subtle"
+          size="sm"
           onClick={() => router.push("/")}
           data-testid="room-new-poll-btn"
           aria-label={t("nav.newPoll")}
-          className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-2xl text-xs font-semibold text-zinc-300 hover:text-white liquid-glass-subtle border border-white/10 transition-all active:scale-95"
+          icon={<ArrowLeft className="w-3.5 h-3.5 text-amber-400" />}
         >
-          <ArrowLeft className="w-3.5 h-3.5 text-amber-400" />
           {t("nav.newPoll")}
-        </button>
+        </Button>
       </div>
 
       <MonthScheduler

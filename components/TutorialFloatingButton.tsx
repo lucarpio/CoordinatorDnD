@@ -17,7 +17,7 @@ export default function TutorialFloatingButton() {
       type="button"
       onClick={() => setShowHelpModal(true)}
       data-testid="tutorial-floating-btn"
-      className="fixed bottom-5 left-4 sm:left-6 z-40 flex items-center gap-2 p-2.5 sm:px-3.5 sm:py-2 rounded-2xl bg-zinc-950/85 hover:bg-zinc-900/95 backdrop-blur-2xl border border-white/15 hover:border-amber-400/40 text-zinc-300 hover:text-amber-300 shadow-2xl shadow-black/60 transition-all active:scale-95 group ring-1 ring-white/10 animate-in fade-in slide-in-from-bottom-3 duration-300"
+      className="btn-floating group"
       title={t("tutorial.helpTitle")}
       aria-label={t("tutorial.helpTitle")}
     >
