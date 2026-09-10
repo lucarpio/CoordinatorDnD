@@ -285,6 +285,59 @@ body {
     @apply relative bg-zinc-950/95 backdrop-blur-2xl border border-amber-400/40 rounded-3xl p-4 sm:p-5 shadow-2xl shadow-amber-500/25 ring-1 ring-white/10 space-y-3;
     animation: modal-appear 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
+
+  /* ============================================================ */
+  /* CELDAS DE CALENDARIO MENSUAL Y SUS ELEMENTOS INTERNOS        */
+  /* ============================================================ */
+  .calendar-cell {
+    @apply relative min-h-[72px] sm:min-h-[115px] p-2 sm:p-2.5 rounded-2xl border transition-all duration-200 flex flex-col justify-between select-none;
+  }
+  .calendar-cell-idle {
+    @apply liquid-glass-subtle border-white/10 hover:border-white/20 hover:bg-white/[0.08];
+  }
+  .calendar-cell-voted {
+    @apply bg-amber-500/[0.14] border-amber-400/60 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)];
+  }
+  .calendar-cell-quorum {
+    @apply bg-emerald-500/[0.16] border-emerald-400/70 shadow-[0_4px_24px_-4px_rgba(16,185,129,0.35)];
+  }
+  .calendar-cell-past {
+    @apply bg-black/25 border-white/[0.04] opacity-35 cursor-not-allowed;
+  }
+  .calendar-cell-actionable {
+    @apply cursor-pointer active:scale-95;
+  }
+
+  /* Elementos internos de la celda */
+  .cell-vote-icon {
+    @apply w-4 h-4 rounded-lg flex items-center justify-center ios-btn-amber text-zinc-950 shadow-sm;
+  }
+  .cell-checkbox-empty {
+    @apply w-4 h-4 rounded-lg flex items-center justify-center transition-all border border-white/20;
+  }
+  .cell-notes-badge {
+    @apply inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-300 text-[9px] sm:text-[10px] font-bold transition-transform hover:scale-105 active:scale-95 shadow-sm;
+  }
+  .cell-quorum-pill {
+    @apply inline-flex items-center gap-1 px-2 sm:px-2.5 py-0.5 rounded-full ios-btn-emerald text-white font-black text-[10px] sm:text-xs shadow-md shadow-emerald-500/30 animate-pulse;
+  }
+  .cell-votes-pill {
+    @apply inline-flex items-center px-2 sm:px-2.5 py-0.5 rounded-full font-bold text-[10px] sm:text-xs transition-colors liquid-glass-subtle text-zinc-200 border border-white/15 hover:border-white/30 hover:bg-white/15;
+  }
+  .cell-votes-pill-empty {
+    @apply inline-flex items-center px-2 sm:px-2.5 py-0.5 rounded-full font-bold text-[10px] sm:text-xs transition-colors bg-black/20 text-zinc-500 border border-white/[0.05] hover:border-white/20 hover:text-zinc-300;
+  }
+  .cell-progress-track {
+    @apply w-full h-1 sm:h-1.5 bg-black/30 rounded-full overflow-hidden border border-white/[0.06];
+  }
+
+  /* Tooltip flotante de celda */
+  .cell-tooltip {
+    @apply absolute mb-2 z-50 w-60 sm:w-64 p-3.5 bg-[#0c0e14]/95 backdrop-blur-2xl rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.85)] pointer-events-auto text-left hidden sm:block border border-white/20;
+  }
+  .cell-tooltip-arrow {
+    @apply absolute -bottom-1.5 w-3 h-3 bg-[#0c0e14] border-r border-b border-white/20 rotate-45 pointer-events-none;
+  }
 }
 
 @keyframes modal-appear {

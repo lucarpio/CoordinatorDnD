@@ -1544,6 +1544,22 @@ export default function MonthScheduler({
                   }
                 };
 
+                const cellStateClass = isPastDate
+                  ? "calendar-cell-past"
+                  : (isSlotsMode ? anySlotQuorum : isQuorumReached)
+                  ? `calendar-cell-quorum ${selectedPlayer || isSlotsMode ? "calendar-cell-actionable" : "cursor-default"}`
+                  : (isSlotsMode ? userVotedAnySlot : isSelectedPlayerVoted)
+                  ? `calendar-cell-voted ${selectedPlayer || isSlotsMode ? "calendar-cell-actionable" : "cursor-default"}`
+                  : `calendar-cell-idle ${selectedPlayer || isSlotsMode ? "calendar-cell-actionable" : "cursor-default"}`;
+
+                const dayNumberColor = isPastDate
+                  ? "text-zinc-600"
+                  : (isSlotsMode ? anySlotQuorum : isQuorumReached)
+                  ? "text-emerald-300"
+                  : cellDay.isWeekend
+                  ? "text-amber-300 font-extrabold"
+                  : "text-zinc-200";
+
                 return (
                   <div
                     key={dateKey}
@@ -1562,41 +1578,13 @@ export default function MonthScheduler({
                         ? t("scheduler.clickToUnmark")
                         : t("scheduler.clickToMark")
                     }
-                    className={`group relative min-h-[72px] sm:min-h-[115px] p-2 sm:p-2.5 rounded-2xl border transition-all duration-200 flex flex-col justify-between select-none ${
+                    className={`calendar-cell group ${cellStateClass} ${
                       hoveredDay?.dateString === dateKey ? "z-40" : "z-10"
-                    } ${
-                      isPastDate
-                        ? "bg-black/25 border-white/[0.04] opacity-35 cursor-not-allowed"
-                        : isSlotsMode
-                        ? anySlotQuorum
-                          ? "bg-emerald-500/[0.16] border-emerald-400/70 shadow-[0_4px_24px_-4px_rgba(16,185,129,0.35)] cursor-pointer active:scale-95"
-                          : userVotedAnySlot
-                          ? "bg-amber-500/[0.14] border-amber-400/60 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)] cursor-pointer active:scale-95"
-                          : "liquid-glass-subtle border-white/10 hover:border-white/20 hover:bg-white/[0.08] cursor-pointer active:scale-95"
-                        : !selectedPlayer
-                        ? isQuorumReached
-                          ? "bg-emerald-500/[0.14] border-emerald-400/70 cursor-default"
-                          : "liquid-glass-subtle border-white/10 cursor-default"
-                        : isQuorumReached
-                        ? "bg-emerald-500/[0.16] border-emerald-400/70 hover:border-emerald-300 shadow-[0_4px_24px_-4px_rgba(16,185,129,0.35)] cursor-pointer active:scale-95"
-                        : isSelectedPlayerVoted
-                        ? "bg-amber-500/[0.14] border-amber-400/60 hover:border-amber-300 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)] cursor-pointer active:scale-95"
-                        : "liquid-glass-subtle border-white/10 hover:border-white/20 hover:bg-white/[0.08] cursor-pointer active:scale-95"
                     }`}
                   >
                     {/* Cabecera de celda: Día + Checkbox de usuario (o indicador en slots) */}
                     <div className="flex items-center justify-between">
-                      <span
-                        className={`text-xs sm:text-sm font-black tracking-tight ${
-                          isPastDate
-                            ? "text-zinc-600"
-                            : (isSlotsMode ? anySlotQuorum : isQuorumReached)
-                            ? "text-emerald-300"
-                            : cellDay.isWeekend
-                            ? "text-amber-300 font-extrabold"
-                            : "text-zinc-200"
-                        }`}
-                      >
+                      <span className={`text-xs sm:text-sm font-black tracking-tight ${dayNumberColor}`}>
                         {cellDay.dayNumber}
                       </span>
 
@@ -1607,7 +1595,7 @@ export default function MonthScheduler({
                         userVotedAnySlot && (
                           <span
                             title={t("scheduler.slotsPickerTitle")}
-                            className="w-4 h-4 rounded-lg flex items-center justify-center ios-btn-amber text-zinc-950 shadow-sm"
+                            className="cell-vote-icon"
                           >
                             <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3 stroke-[3]" />
                           </span>
@@ -1620,11 +1608,7 @@ export default function MonthScheduler({
                                 ? t("scheduler.clickToUnmark")
                                 : t("scheduler.clickToMark")
                             }
-                            className={`w-4 h-4 rounded-lg flex items-center justify-center transition-all ${
-                              isSelectedPlayerVoted
-                                ? "ios-btn-amber text-zinc-950 shadow-sm"
-                                : "border border-white/20 group-hover:border-white/40"
-                            }`}
+                            className={isSelectedPlayerVoted ? "cell-vote-icon" : "cell-checkbox-empty group-hover:border-white/40"}
                           >
                             {isSelectedPlayerVoted && <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3 stroke-[3]" />}
                           </span>
@@ -1668,7 +1652,7 @@ export default function MonthScheduler({
                               }
                               aria-label={`${locale === "en" ? "View notes for" : "Ver notas de"} ${formatFriendlyDate(dateKey, locale)}`}
                               data-testid={`notes-btn-${dateKey}`}
-                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-300 text-[9px] font-bold transition-transform hover:scale-105 active:scale-95 shadow-sm"
+                              className="cell-notes-badge"
                             >
                               <MessageSquare className="w-2.5 h-2.5" />
                               <span>{dateNotes.length}</span>
@@ -1690,20 +1674,14 @@ export default function MonthScheduler({
                           className="cursor-pointer transition-transform hover:scale-105 active:scale-95 focus:outline-none"
                         >
                           {isQuorumReached ? (
-                            <div className="inline-flex items-center gap-1 px-2 sm:px-2.5 py-0.5 rounded-full ios-btn-emerald text-white font-black text-[10px] sm:text-xs shadow-md shadow-emerald-500/30 animate-pulse">
+                            <div className="cell-quorum-pill">
                               <span>★</span>
                               <span>
                                 {voterCount}/{totalParticipants}
                               </span>
                             </div>
                           ) : (
-                            <div
-                              className={`inline-flex items-center px-2 sm:px-2.5 py-0.5 rounded-full font-bold text-[10px] sm:text-xs transition-colors ${
-                                voterCount > 0
-                                  ? "liquid-glass-subtle text-zinc-200 border border-white/15 hover:border-white/30 hover:bg-white/15"
-                                  : "bg-black/20 text-zinc-500 border border-white/[0.05] hover:border-white/20 hover:text-zinc-300"
-                              }`}
-                            >
+                            <div className={voterCount > 0 ? "cell-votes-pill" : "cell-votes-pill-empty"}>
                               {voterCount}/{totalParticipants}
                             </div>
                           )}
@@ -1727,7 +1705,7 @@ export default function MonthScheduler({
                               }
                               aria-label={`${locale === "en" ? "View notes for" : "Ver notas de"} ${formatFriendlyDate(dateKey, locale)}`}
                               data-testid={`notes-btn-${dateKey}`}
-                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-300 text-[9px] sm:text-[10px] font-bold transition-transform hover:scale-105 active:scale-95 shadow-sm"
+                              className="cell-notes-badge"
                             >
                               <MessageSquare className="w-2.5 h-2.5" />
                               <span>{dateNotes.length}</span>
@@ -1740,7 +1718,7 @@ export default function MonthScheduler({
                     {/* Mini Barra de progreso visual (solo en single mode) */}
                     {!isSlotsMode && (
                       <div className="w-full space-y-1">
-                        <div className="w-full h-1 sm:h-1.5 bg-black/30 rounded-full overflow-hidden border border-white/[0.06]">
+                        <div className="cell-progress-track">
                           <div
                             className={`h-full transition-all duration-300 rounded-full ${
                               isQuorumReached
@@ -1773,14 +1751,14 @@ export default function MonthScheduler({
                         onMouseEnter={handleTooltipMouseEnter}
                         onMouseLeave={handleTooltipMouseLeave}
                         onClick={(e) => e.stopPropagation()}
-                        className={`absolute bottom-full ${tooltipPositionClass} mb-2 z-50 w-60 sm:w-64 p-3.5 bg-[#0c0e14]/95 backdrop-blur-2xl rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.85)] pointer-events-auto text-left hidden sm:block border border-white/20`}
+                        className={`cell-tooltip bottom-full ${tooltipPositionClass}`}
                       >
                         {/* Puente invisible para evitar perder el hover al cruzar el margen */}
                         <div className="absolute -bottom-3 left-0 right-0 h-3" />
 
                         {/* Flecha indicadora apuntando a la celda */}
                         <div
-                          className={`absolute -bottom-1.5 ${arrowPositionClass} w-3 h-3 bg-[#0c0e14] border-r border-b border-white/20 rotate-45 pointer-events-none`}
+                          className={`cell-tooltip-arrow ${arrowPositionClass}`}
                         />
 
                         <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-white/10">
