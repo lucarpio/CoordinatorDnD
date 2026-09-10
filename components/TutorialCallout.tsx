@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useTutorial } from "@/context/TutorialContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { Sparkles, X, Check } from "lucide-react";
+import Button from "@/components/ui/Button";
 
 interface TutorialCalloutProps {
   stepId: string;
@@ -81,12 +82,12 @@ export default function TutorialCallout({
   const floatingCard = mounted ? (
     createPortal(
       <div
-        className="fixed bottom-5 left-3 right-3 sm:left-auto sm:right-6 sm:bottom-6 sm:w-[380px] max-w-[calc(100vw-24px)] z-50 animate-in fade-in slide-in-from-bottom-4 duration-300 pointer-events-auto"
+        className="callout-card"
         role="dialog"
         aria-label={displayTitle}
       >
         {/* Contenedor Liquid Glass flotante con resplandor ámbar */}
-        <div className="relative bg-zinc-950/95 backdrop-blur-2xl border border-amber-400/40 rounded-3xl p-4 sm:p-5 shadow-2xl shadow-amber-500/25 ring-1 ring-white/10 space-y-3">
+        <div className="callout-card-inner">
           {/* Cabecera del Callout */}
           <div className="flex items-center justify-between gap-2 border-b border-white/[0.08] pb-2.5">
             <div className="flex items-center gap-1.5">
@@ -101,7 +102,7 @@ export default function TutorialCallout({
             <button
               type="button"
               onClick={() => completeStep(stepId)}
-              className="p-1 text-zinc-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
+              className="btn-icon"
               title={t("common.close")}
               aria-label={t("common.close")}
               data-testid="tutorial-callout-close-btn"
@@ -132,16 +133,17 @@ export default function TutorialCallout({
               {t("tutorial.dismiss")}
             </button>
 
-            <button
+            <Button
               type="button"
+              variant="amber"
+              size="sm"
               onClick={handleGotIt}
               data-testid="tutorial-callout-got-it-btn"
               aria-label={t("tutorial.gotIt")}
-              className="ios-btn-amber text-zinc-950 font-black text-xs px-4 py-1.5 rounded-xl flex items-center gap-1.5 shadow-md shadow-amber-500/20 active:scale-95 transition-all"
+              icon={<Check className="w-3.5 h-3.5 stroke-[3]" />}
             >
-              <span>{t("tutorial.gotIt")}</span>
-              <Check className="w-3.5 h-3.5 stroke-[3]" />
-            </button>
+              {t("tutorial.gotIt")}
+            </Button>
           </div>
         </div>
       </div>,

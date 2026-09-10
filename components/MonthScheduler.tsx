@@ -60,6 +60,7 @@ import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import PlayerAvatar from "@/components/ui/PlayerAvatar";
 import SegmentedControl from "@/components/ui/SegmentedControl";
+import Modal from "@/components/ui/Modal";
 
 const WEEKDAY_NAMES_SHORT: Record<SupportedLocale, string[]> = {
   es: ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"],
@@ -2109,45 +2110,20 @@ export default function MonthScheduler({
       </div>
 
       {/* Modal de Detalle de Día estilo iOS Sheet */}
-      {activeDayModal && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setActiveDayModal(null);
-            }
-          }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-xl animate-in fade-in duration-200 cursor-pointer"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="day-detail-title"
-          data-testid="day-detail-modal"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-md liquid-glass-elevated rounded-3xl p-6 sm:p-7 shadow-2xl space-y-5 cursor-default overflow-hidden"
-          >
-            {/* iOS Sheet Grab Indicator */}
-            <div className="w-10 h-1 bg-white/25 rounded-full mx-auto -mt-1 mb-2" />
-
-            <button
-              onClick={() => setActiveDayModal(null)}
-              className="absolute top-5 right-5 p-2 text-zinc-400 hover:text-white rounded-2xl hover:bg-white/10 transition-colors"
-              title={t("common.close")}
-              aria-label={t("common.close")}
-              data-testid="day-detail-close-btn"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div>
-              <div className="text-[11px] font-bold text-amber-300 uppercase tracking-wider">
-                {t("scheduler.dayDetailHeader")}
-              </div>
-              <h3 id="day-detail-title" className="text-xl font-black text-zinc-100 tracking-tight mt-1">
-                {formatFriendlyDate(activeDayModal.dateString, locale)}
-              </h3>
-            </div>
-
+      <Modal
+        isOpen={Boolean(activeDayModal)}
+        onClose={() => setActiveDayModal(null)}
+        testId="day-detail-modal"
+        maxWidthClass="max-w-md"
+        badge={
+          <div className="text-[11px] font-bold text-amber-300 uppercase tracking-wider">
+            {t("scheduler.dayDetailHeader")}
+          </div>
+        }
+        title={activeDayModal ? formatFriendlyDate(activeDayModal.dateString, locale) : ""}
+      >
+        {activeDayModal && (
+          <>
             {/* Votantes */}
             {(() => {
               if (isSlotsMode) {
@@ -2320,8 +2296,9 @@ export default function MonthScheduler({
 
                           <div className="flex items-center justify-end gap-2">
                             {isEditingComment && (
-                              <button
-                                type="button"
+                              <Button
+                                variant="subtle"
+                                size="sm"
                                 onClick={() => {
                                   setIsEditingComment(false);
                                   const currentComments = poll.comments?.[activeDayModal.dateString] || [];
@@ -2330,22 +2307,21 @@ export default function MonthScheduler({
                                 }}
                                 data-testid="cancel-note-btn"
                                 aria-label={t("scheduler.cancelNoteBtn")}
-                                className="px-3 py-1.5 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white liquid-glass-subtle border border-white/10 transition-colors"
                               >
                                 {t("scheduler.cancelNoteBtn")}
-                              </button>
+                              </Button>
                             )}
-                            <button
-                              type="button"
+                            <Button
+                              variant="amber"
+                              size="sm"
                               disabled={!commentInput.trim() || isSavingComment}
                               onClick={() => handleSaveComment(activeDayModal.dateString, commentInput)}
                               data-testid="save-note-btn"
                               aria-label={t("scheduler.saveNoteBtn")}
-                              className="px-4 py-1.5 rounded-xl text-xs font-black ios-btn-amber text-zinc-950 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm transition-all flex items-center gap-1.5"
+                              icon={isSavingComment ? <Loader2 className="w-3 h-3 animate-spin" /> : undefined}
                             >
-                              {isSavingComment && <Loader2 className="w-3 h-3 animate-spin" />}
-                              <span>{t("scheduler.saveNoteBtn")}</span>
-                            </button>
+                              {t("scheduler.saveNoteBtn")}
+                            </Button>
                           </div>
                         </div>
                       ) : null}
@@ -2494,8 +2470,9 @@ export default function MonthScheduler({
 
                         <div className="flex items-center justify-end gap-2">
                           {isEditingComment && (
-                            <button
-                              type="button"
+                            <Button
+                              variant="subtle"
+                              size="sm"
                               onClick={() => {
                                 setIsEditingComment(false);
                                 const currentComments = poll.comments?.[activeDayModal.dateString] || [];
@@ -2504,22 +2481,21 @@ export default function MonthScheduler({
                               }}
                               data-testid="cancel-note-btn"
                               aria-label={t("scheduler.cancelNoteBtn")}
-                              className="px-3 py-1.5 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white liquid-glass-subtle border border-white/10 transition-colors"
                             >
                               {t("scheduler.cancelNoteBtn")}
-                            </button>
+                            </Button>
                           )}
-                          <button
-                            type="button"
+                          <Button
+                            variant="amber"
+                            size="sm"
                             disabled={!commentInput.trim() || isSavingComment}
                             onClick={() => handleSaveComment(activeDayModal.dateString, commentInput)}
                             data-testid="save-note-btn"
                             aria-label={t("scheduler.saveNoteBtn")}
-                            className="px-4 py-1.5 rounded-xl text-xs font-black ios-btn-amber text-zinc-950 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm transition-all flex items-center gap-1.5"
+                            icon={isSavingComment ? <Loader2 className="w-3 h-3 animate-spin" /> : undefined}
                           >
-                            {isSavingComment && <Loader2 className="w-3 h-3 animate-spin" />}
-                            <span>{t("scheduler.saveNoteBtn")}</span>
-                          </button>
+                            {t("scheduler.saveNoteBtn")}
+                          </Button>
                         </div>
                       </div>
                     ) : selectedPlayer && !voters.includes(selectedPlayer) && activeDayModal.dateString >= todayDateStr ? (
@@ -2532,39 +2508,33 @@ export default function MonthScheduler({
                   {/* Si el usuario tiene personaje seleccionado y el día no ha pasado, botón directo de votar */}
                   {selectedPlayer && activeDayModal.dateString >= todayDateStr && (
                     <div className="pt-3 border-t border-white/10">
-                      <button
-                        type="button"
+                      <Button
+                        variant={voters.includes(selectedPlayer) ? "danger" : "amber"}
+                        fullWidth
+                        size="lg"
                         onClick={() => {
                           toggleDateAvailability(activeDayModal.dateString);
                         }}
                         data-testid="modal-toggle-vote-btn"
                         aria-label={voters.includes(selectedPlayer) ? t("scheduler.removeMyAvailability") : t("scheduler.markMeAvailable")}
-                        className={`w-full py-3 px-4 rounded-2xl text-xs font-black transition-all shadow-md flex items-center justify-center gap-2 active:scale-95 ${
-                          voters.includes(selectedPlayer)
-                            ? "bg-red-500/20 hover:bg-red-500/30 border border-red-400/40 text-red-200"
-                            : "ios-btn-amber text-zinc-950"
-                        }`}
-                      >
-                        {voters.includes(selectedPlayer) ? (
-                          <>
+                        icon={
+                          voters.includes(selectedPlayer) ? (
                             <X className="w-4 h-4" />
-                            {t("scheduler.removeMyAvailability")}
-                          </>
-                        ) : (
-                          <>
+                          ) : (
                             <Check className="w-4 h-4 stroke-[3]" />
-                            {t("scheduler.markMeAvailable")}
-                          </>
-                        )}
-                      </button>
+                          )
+                        }
+                      >
+                        {voters.includes(selectedPlayer) ? t("scheduler.removeMyAvailability") : t("scheduler.markMeAvailable")}
+                      </Button>
                     </div>
                   )}
                 </div>
               );
             })()}
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
 
       {/* Toast rápido al marcar disponibilidad: "Añadir nota" */}
       {quickNoteDate && (
@@ -2607,23 +2577,14 @@ export default function MonthScheduler({
       )}
 
       {/* Modal de confirmación para desmarcar fecha con nota */}
-      {confirmUnmarkDate && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setConfirmUnmarkDate(null);
-            }
-          }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xl animate-in fade-in duration-200 cursor-pointer"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="confirm-unmark-title"
-          data-testid="confirm-unmark-modal"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-sm liquid-glass-elevated rounded-3xl p-6 shadow-2xl space-y-4 border border-amber-400/30 cursor-default"
-          >
+      <Modal
+        isOpen={Boolean(confirmUnmarkDate)}
+        onClose={() => setConfirmUnmarkDate(null)}
+        testId="confirm-unmark-modal"
+        maxWidthClass="max-w-sm"
+      >
+        {confirmUnmarkDate && (
+          <div className="space-y-4">
             <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto border border-amber-400/30">
               <MessageSquare className="w-6 h-6" />
             </div>
@@ -2647,17 +2608,18 @@ export default function MonthScheduler({
             </div>
 
             <div className="flex items-center gap-2 pt-2">
-              <button
-                type="button"
+              <Button
+                variant="subtle"
+                fullWidth
                 onClick={() => setConfirmUnmarkDate(null)}
                 data-testid="confirm-unmark-cancel-btn"
                 aria-label={t("common.cancel")}
-                className="flex-1 py-2.5 rounded-2xl text-xs font-semibold text-zinc-300 hover:text-white liquid-glass-subtle border border-white/10 transition-all active:scale-95"
               >
                 {t("common.cancel")}
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="danger"
+                fullWidth
                 onClick={() => {
                   const targetDate = confirmUnmarkDate.dateStr;
                   setConfirmUnmarkDate(null);
@@ -2665,58 +2627,30 @@ export default function MonthScheduler({
                 }}
                 data-testid="confirm-unmark-confirm-btn"
                 aria-label={t("scheduler.confirmUnmarkBtn")}
-                className="flex-1 py-2.5 rounded-2xl text-xs font-black bg-red-500 hover:bg-red-600 text-white shadow-md shadow-red-950/40 transition-all active:scale-95"
               >
                 {t("scheduler.confirmUnmarkBtn")}
-              </button>
+              </Button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
 
       {/* Modal / Bottom Sheet compacto para seleccionar Franjas Horarias de un día */}
-      {slotPickerDay && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setSlotPickerDay(null);
-            }
-          }}
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/65 backdrop-blur-xl animate-in fade-in duration-200 cursor-pointer"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="slot-picker-title"
-          data-testid="slot-picker-modal"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="relative w-full sm:max-w-md liquid-glass-elevated rounded-t-3xl sm:rounded-3xl p-6 sm:p-7 shadow-2xl space-y-4 cursor-default border-t sm:border border-white/20 animate-in slide-in-from-bottom-6 duration-200"
-          >
-            {/* iOS Sheet Grab Indicator */}
-            <div className="w-10 h-1 bg-white/25 rounded-full mx-auto -mt-1 mb-2 sm:hidden" />
-
-            <button
-              onClick={() => setSlotPickerDay(null)}
-              className="absolute top-5 right-5 p-2 text-zinc-400 hover:text-white rounded-2xl hover:bg-white/10 transition-colors"
-              title={t("common.close")}
-              aria-label={t("common.close")}
-              data-testid="slot-picker-close-btn"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div>
-              <div className="text-[11px] font-bold text-amber-300 uppercase tracking-wider">
-                {t("scheduler.dayDetailHeader")}
-              </div>
-              <h3 id="slot-picker-title" className="text-xl font-black text-zinc-100 tracking-tight mt-1">
-                {formatFriendlyDate(slotPickerDay.dateString, locale)}
-              </h3>
-              <p className="text-xs text-zinc-400 mt-1">
-                {t("scheduler.selectSlotsDesc")}
-              </p>
-            </div>
-
+      <Modal
+        isOpen={Boolean(slotPickerDay)}
+        onClose={() => setSlotPickerDay(null)}
+        testId="slot-picker-modal"
+        maxWidthClass="max-w-md"
+        badge={
+          <div className="text-[11px] font-bold text-amber-300 uppercase tracking-wider">
+            {t("scheduler.dayDetailHeader")}
+          </div>
+        }
+        title={slotPickerDay ? formatFriendlyDate(slotPickerDay.dateString, locale) : ""}
+        subtitle={t("scheduler.selectSlotsDesc")}
+      >
+        {slotPickerDay && (
+          <div className="space-y-4">
             {/* Selector de franjas con píldoras interactivas */}
             <div className="space-y-2.5 pt-1">
               {activeSlots.map((sId) => {
@@ -2735,9 +2669,9 @@ export default function MonthScheduler({
                       <div className="flex items-center gap-2">
                         <span className="text-xs sm:text-sm font-bold text-zinc-100">{slotName}</span>
                         {isQuorum && (
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/25 text-emerald-300 border border-emerald-400/40 text-[10px] font-black">
+                          <Badge variant="emerald">
                             ★ 100%
-                          </span>
+                          </Badge>
                         )}
                       </div>
                       <span className="text-[11px] text-zinc-400">
@@ -2746,29 +2680,16 @@ export default function MonthScheduler({
                     </div>
 
                     {selectedPlayer ? (
-                      <button
-                        type="button"
+                      <Button
+                        variant={isSelected ? "emerald" : "subtle"}
+                        size="sm"
                         onClick={() => toggleDateAvailability(slotPickerDay.dateString, undefined, sId)}
                         data-testid={`slot-picker-btn-${sId}`}
                         aria-pressed={isSelected}
-                        className={`min-h-[40px] px-4 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 active:scale-95 shadow-sm ${
-                          isSelected
-                            ? "ios-btn-emerald text-white shadow-emerald-950/40"
-                            : "liquid-glass hover:bg-white/10 text-zinc-300 border border-white/15"
-                        }`}
+                        icon={isSelected ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : <Plus className="w-3.5 h-3.5" />}
                       >
-                        {isSelected ? (
-                          <>
-                            <Check className="w-3.5 h-3.5 stroke-[3]" />
-                            <span>{locale === "en" ? "Available" : "Disponible"}</span>
-                          </>
-                        ) : (
-                          <>
-                            <Plus className="w-3.5 h-3.5" />
-                            <span>{locale === "en" ? "Mark" : "Marcar"}</span>
-                          </>
-                        )}
-                      </button>
+                        {isSelected ? (locale === "en" ? "Available" : "Disponible") : (locale === "en" ? "Mark" : "Marcar")}
+                      </Button>
                     ) : (
                       <span className="text-[11px] text-zinc-500 italic">
                         {voters.length > 0 ? voters.join(", ") : t("scheduler.noVotes")}
@@ -2781,23 +2702,23 @@ export default function MonthScheduler({
 
             {/* Botón para ver detalle completo o notas del día */}
             <div className="pt-2 flex items-center justify-between gap-2 border-t border-white/10">
-              <button
-                type="button"
+              <Button
+                variant="subtle"
+                fullWidth
                 onClick={() => {
                   const target = slotPickerDay;
                   setSlotPickerDay(null);
                   setActiveDayModal(target);
                 }}
                 data-testid="slot-picker-see-details-btn"
-                className="w-full py-2.5 px-4 rounded-2xl liquid-glass-subtle hover:bg-white/[0.12] text-zinc-200 border border-white/15 text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-95"
+                icon={<Eye className="w-4 h-4" />}
               >
-                <Eye className="w-4 h-4" />
-                <span>{t("scheduler.seeDetail")}</span>
-              </button>
+                {t("scheduler.seeDetail")}
+              </Button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
 
       {/* Modal de Reclamo de Personaje */}
       <ClaimCharacterModal
