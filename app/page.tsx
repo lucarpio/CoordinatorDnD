@@ -23,6 +23,8 @@ import { saveCreatedPoll, getSavedPolls, SavedPoll } from "@/lib/storage";
 import { useLanguage } from "@/context/LanguageContext";
 import { useTutorial } from "@/context/TutorialContext";
 import TutorialCallout from "@/components/TutorialCallout";
+import Button from "@/components/ui/Button";
+import SegmentedControl from "@/components/ui/SegmentedControl";
 
 export default function Home() {
   const router = useRouter();
@@ -301,24 +303,27 @@ export default function Home() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 pt-1">
-            <button
+            <Button
+              variant="emerald"
+              size="lg"
               onClick={handleCopyWhatsAppLink}
               data-testid="copy-share-url-btn"
               aria-label={copiedLink ? t("home.copied") : t("home.copyLink")}
-              className="flex-1 px-4 py-3.5 ios-btn-emerald text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+              icon={<Copy className="w-4 h-4" />}
+              className="flex-1"
             >
-              <Copy className="w-4 h-4" />
               {copiedLink ? t("home.copied") : t("home.copyLink")}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="subtle"
+              size="lg"
               onClick={() => router.push(`/m/${createdRoom.slug}`)}
               data-testid="go-to-created-room-btn"
               aria-label={t("home.goToRoom")}
-              className="px-6 py-3.5 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-100 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] border border-white/15"
+              icon={<ArrowRight className="w-4 h-4" />}
             >
               {t("home.goToRoom")}
-              <ArrowRight className="w-4 h-4" />
-            </button>
+            </Button>
           </div>
         </div>
       ) : (
@@ -441,16 +446,17 @@ export default function Home() {
                 placeholder={t("home.participantPlaceholder")}
                 className="flex-1 liquid-glass-input rounded-2xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500"
               />
-              <button
+              <Button
                 type="button"
+                variant="subtle"
+                size="sm"
                 onClick={handleAddParticipant}
                 data-testid="add-participant-btn"
                 aria-label={t("home.addBtn")}
-                className="px-4 py-2.5 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-200 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all border border-white/10 active:scale-95"
+                icon={<Plus className="w-4 h-4" />}
               >
-                <Plus className="w-4 h-4" />
                 {t("home.addBtn")}
-              </button>
+              </Button>
             </div>
 
             {/* Tags de participantes */}
@@ -489,32 +495,23 @@ export default function Home() {
             </label>
 
             {/* Segmented Control iOS */}
-            <div className="grid grid-cols-2 gap-1.5 p-1 rounded-2xl ios-segmented-control">
-              <button
-                type="button"
-                onClick={() => setTimeMode("single")}
-                data-testid="schedule-mode-single-btn"
-                className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-2 ${
-                  timeMode === "single"
-                    ? "ios-segmented-active"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-              >
-                <span>{t("home.scheduleModeSingle")}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setTimeMode("slots")}
-                data-testid="schedule-mode-slots-btn"
-                className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-2 ${
-                  timeMode === "slots"
-                    ? "ios-segmented-active"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-              >
-                <span>{t("home.scheduleModeSlots")}</span>
-              </button>
-            </div>
+            <SegmentedControl
+              value={timeMode}
+              onChange={(val) => setTimeMode(val as TimeMode)}
+              fullWidth
+              options={[
+                {
+                  value: "single",
+                  label: t("home.scheduleModeSingle"),
+                  testId: "schedule-mode-single-btn",
+                },
+                {
+                  value: "slots",
+                  label: t("home.scheduleModeSlots"),
+                  testId: "schedule-mode-slots-btn",
+                },
+              ]}
+            />
 
             {/* Contenido según el modo */}
             {timeMode === "single" ? (
@@ -573,16 +570,19 @@ export default function Home() {
           </div>
 
           <div className="pt-2">
-            <button
+            <Button
               type="submit"
+              variant="amber"
+              size="lg"
+              fullWidth
+              isLoading={isLoading}
               disabled={isLoading}
               data-testid="create-poll-submit-btn"
               aria-label={isLoading ? t("home.creatingBtn") : t("home.submitBtn")}
-              className="w-full py-4 ios-btn-amber text-zinc-950 font-black text-sm uppercase tracking-wider rounded-2xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98]"
+              icon={<Dices className="w-5 h-5" />}
             >
-              <Dices className="w-5 h-5" />
               {isLoading ? t("home.creatingBtn") : t("home.submitBtn")}
-            </button>
+            </Button>
           </div>
         </form>
       </div>

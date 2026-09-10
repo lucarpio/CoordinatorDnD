@@ -203,5 +203,85 @@ body {
   .note-item-compact {
     @apply inline-flex flex-wrap items-baseline gap-1 text-[10px] sm:text-[11px] px-2.5 py-1 rounded-xl bg-amber-500/10 border border-amber-400/20 text-zinc-200 break-words [word-break:break-word] w-full;
   }
+
+  /* ============================================================ */
+  /* BOTONES DEL DESIGN SYSTEM (Clases Semánticas)                */
+  /* ============================================================ */
+  .btn-base {
+    @apply inline-flex items-center justify-center gap-1.5 font-bold transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed select-none;
+  }
+  .btn-primary {
+    @apply btn-base bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-zinc-950 shadow-md shadow-amber-500/20;
+  }
+  .btn-amber {
+    @apply btn-base ios-btn-amber text-zinc-950 shadow-md shadow-amber-500/20;
+  }
+  .btn-emerald {
+    @apply btn-base ios-btn-emerald text-white shadow-md shadow-emerald-950/30;
+  }
+  .btn-subtle {
+    @apply btn-base liquid-glass-subtle hover:bg-white/[0.12] text-zinc-200 border border-white/15;
+  }
+  .btn-danger {
+    @apply btn-base bg-red-500 hover:bg-red-600 text-white shadow-md shadow-red-950/40;
+  }
+  .btn-icon {
+    @apply p-2 rounded-2xl text-zinc-400 hover:text-white hover:bg-white/10 transition-colors select-none active:scale-95;
+  }
+
+  /* ============================================================ */
+  /* BADGES Y ETIQUETAS                                          */
+  /* ============================================================ */
+  .badge-base {
+    @apply inline-flex items-center gap-1 font-bold rounded-full select-none;
+  }
+  .badge-amber {
+    @apply badge-base bg-amber-500/15 border border-amber-400/30 text-amber-300;
+  }
+  .badge-emerald {
+    @apply badge-base bg-emerald-500/20 border border-emerald-400/40 text-emerald-300;
+  }
+  .badge-neutral {
+    @apply badge-base bg-white/[0.08] border border-white/15 text-zinc-300;
+  }
+
+  /* ============================================================ */
+  /* SEGMENTED CONTROLS (Pestañas estilo iOS)                     */
+  /* ============================================================ */
+  .segmented-track {
+    @apply relative flex items-center gap-1 ios-segmented-control p-1 rounded-2xl select-none;
+  }
+  .segmented-item {
+    @apply flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 text-zinc-400 hover:text-zinc-200 select-none;
+  }
+  .segmented-item-active {
+    @apply ios-segmented-active text-white;
+  }
+
+  /* ============================================================ */
+  /* MODALES Y HOJAS TÁCTILES                                     */
+  /* ============================================================ */
+  .modal-backdrop {
+    @apply fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/65 backdrop-blur-xl cursor-pointer;
+  }
+  .modal-sheet {
+    @apply relative w-full max-w-lg liquid-glass-elevated rounded-3xl p-6 sm:p-7 shadow-2xl space-y-5 overflow-hidden cursor-default border border-white/15;
+    animation: modal-appear 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .modal-grabber {
+    @apply w-10 h-1 bg-white/25 rounded-full mx-auto -mt-1 mb-2;
+  }
 }
+
+@keyframes modal-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
 

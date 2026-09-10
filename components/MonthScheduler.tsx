@@ -56,6 +56,10 @@ import TutorialCallout from "@/components/TutorialCallout";
 import SlotBadge from "@/components/ui/SlotBadge";
 import SlotButton from "@/components/ui/SlotButton";
 import NoteItem from "@/components/ui/NoteItem";
+import Button from "@/components/ui/Button";
+import Badge from "@/components/ui/Badge";
+import PlayerAvatar from "@/components/ui/PlayerAvatar";
+import SegmentedControl from "@/components/ui/SegmentedControl";
 
 const WEEKDAY_NAMES_SHORT: Record<SupportedLocale, string[]> = {
   es: ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"],
@@ -862,9 +866,7 @@ export default function MonthScheduler({
 
                 <div className="flex items-center justify-between gap-3 liquid-glass-subtle rounded-2xl px-3.5 py-2.5 border border-white/10">
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-9 h-9 rounded-2xl ios-btn-amber text-zinc-950 font-black flex items-center justify-center text-sm shadow-md flex-shrink-0">
-                      {selectedPlayer.charAt(0).toUpperCase()}
-                    </div>
+                    <PlayerAvatar name={selectedPlayer} isSelected size="md" />
                     <div className="truncate">
                       <span className="text-sm font-black text-zinc-100 truncate block">
                         {selectedPlayer}
@@ -882,9 +884,9 @@ export default function MonthScheduler({
                     </div>
                   </div>
 
-                  <span className="text-[11px] px-2.5 py-0.5 rounded-full ios-btn-emerald text-white font-bold flex-shrink-0 shadow-sm">
+                  <Badge variant="emerald" className="shadow-sm shrink-0">
                     {locale === "en" ? "Voting" : "Votando"}
-                  </span>
+                  </Badge>
                 </div>
 
                 <p className="text-[11px] text-zinc-400 flex items-center gap-1.5 pt-0.5">
@@ -914,15 +916,16 @@ export default function MonthScheduler({
                       {locale === "en" ? "Browse group availability" : "Consulta la disponibilidad general"}
                     </p>
                   </div>
-                  <button
-                    type="button"
+                  <Button
+                    variant="amber"
+                    size="sm"
                     onClick={handleOpenClaimModal}
                     data-testid="claim-character-btn"
                     aria-label={locale === "en" ? "Claim character" : "Elegir personaje"}
-                    className="px-3.5 py-1.5 ios-btn-amber text-zinc-950 rounded-xl text-xs font-black transition-all shadow-sm flex-shrink-0 active:scale-95"
+                    className="shrink-0"
                   >
                     {locale === "en" ? "Claim character" : "Elegir personaje"}
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -980,25 +983,29 @@ export default function MonthScheduler({
             </div>
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto">
-            <button
+            <Button
+              variant="emerald"
+              size="sm"
               onClick={handleCopyWhatsApp}
               data-testid="banner-export-whatsapp-btn"
               aria-label={copiedWhatsApp ? t("home.copied") : t("scheduler.whatsAppBtn")}
-              className="flex-1 sm:flex-initial px-3.5 py-2 ios-btn-emerald text-white rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95"
+              icon={<Copy className="w-3.5 h-3.5" />}
+              className="flex-1 sm:flex-initial"
             >
-              <Copy className="w-3.5 h-3.5" />
               {copiedWhatsApp ? t("home.copied") : t("scheduler.whatsAppBtn")}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="subtle"
+              size="sm"
               onClick={handleDownloadIcs}
               data-testid="banner-export-ics-btn"
               aria-label={t("scheduler.downloadIcsBtn")}
-              className="flex-1 sm:flex-initial px-3.5 py-2 liquid-glass-subtle hover:bg-white/[0.12] text-zinc-200 rounded-2xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all border border-white/15 active:scale-95"
+              icon={<Download className="w-3.5 h-3.5" />}
+              className="flex-1 sm:flex-initial"
               title={locale === "en" ? "Download .ics file" : "Descargar archivo .ics"}
             >
-              <Download className="w-3.5 h-3.5" />
               {t("scheduler.downloadIcsBtn")}
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -1022,7 +1029,7 @@ export default function MonthScheduler({
             </h2>
 
             {/* Selector de Vista en Mobile (Segmented Control estilo iOS) */}
-            <div className="relative sm:hidden flex items-center gap-1 ios-segmented-control p-1 rounded-2xl">
+            <div className="relative sm:hidden">
               <TutorialCallout
                 stepId="room_views"
                 currentStepNumber={3}
@@ -1030,39 +1037,27 @@ export default function MonthScheduler({
                 position="bottom"
                 align="end"
               />
-              <button
-                type="button"
-                onClick={() => {
-                  setViewMode("list");
+              <SegmentedControl
+                value={viewMode}
+                onChange={(val) => {
+                  setViewMode(val as "grid" | "list");
                   completeStep("room_views");
                 }}
-                data-testid="mobile-view-agenda-btn"
-                aria-label={t("scheduler.viewAgenda")}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${
-                  viewMode === "list"
-                    ? "ios-segmented-active"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-                title={t("scheduler.viewAgenda")}
-              >
-                <List className="w-3.5 h-3.5" />
-                <span>{t("scheduler.viewAgenda")}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("grid")}
-                data-testid="mobile-view-month-btn"
-                aria-label={t("scheduler.viewMonth")}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${
-                  viewMode === "grid"
-                    ? "ios-segmented-active"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-                title={t("scheduler.viewMonth")}
-              >
-                <LayoutGrid className="w-3.5 h-3.5" />
-                <span>{t("scheduler.viewMonth")}</span>
-              </button>
+                options={[
+                  {
+                    value: "list",
+                    label: t("scheduler.viewAgenda"),
+                    icon: <List className="w-3.5 h-3.5" />,
+                    testId: "mobile-view-agenda-btn",
+                  },
+                  {
+                    value: "grid",
+                    label: t("scheduler.viewMonth"),
+                    icon: <LayoutGrid className="w-3.5 h-3.5" />,
+                    testId: "mobile-view-month-btn",
+                  },
+                ]}
+              />
             </div>
           </div>
 
@@ -1077,7 +1072,7 @@ export default function MonthScheduler({
               <span className="font-medium">{t("scheduler.yourVoteLegend")}</span>
             </div>
 
-            <div className="relative flex items-center gap-1 ios-segmented-control p-1 rounded-2xl ml-2">
+            <div className="relative ml-2">
               <TutorialCallout
                 stepId="room_views"
                 currentStepNumber={3}
@@ -1085,40 +1080,27 @@ export default function MonthScheduler({
                 position="bottom"
                 align="end"
               />
-              <button
-                type="button"
-                onClick={() => {
-                  setViewMode("grid");
+              <SegmentedControl
+                value={viewMode}
+                onChange={(val) => {
+                  setViewMode(val as "grid" | "list");
                   completeStep("room_views");
                 }}
-                data-testid="desktop-view-month-btn"
-                aria-label={t("scheduler.viewMonth")}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${
-                  viewMode === "grid"
-                    ? "ios-segmented-active"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-              >
-                <LayoutGrid className="w-3.5 h-3.5" />
-                <span>{t("scheduler.viewMonth")}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setViewMode("list");
-                  completeStep("room_views");
-                }}
-                data-testid="desktop-view-agenda-btn"
-                aria-label={t("scheduler.viewAgenda")}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${
-                  viewMode === "list"
-                    ? "ios-segmented-active"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-              >
-                <List className="w-3.5 h-3.5" />
-                <span>{t("scheduler.viewAgenda")}</span>
-              </button>
+                options={[
+                  {
+                    value: "grid",
+                    label: t("scheduler.viewMonth"),
+                    icon: <LayoutGrid className="w-3.5 h-3.5" />,
+                    testId: "desktop-view-month-btn",
+                  },
+                  {
+                    value: "list",
+                    label: t("scheduler.viewAgenda"),
+                    icon: <List className="w-3.5 h-3.5" />,
+                    testId: "desktop-view-agenda-btn",
+                  },
+                ]}
+              />
             </div>
           </div>
         </div>
