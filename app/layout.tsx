@@ -60,7 +60,19 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" className="dark">
-      <body className="bg-[#08090d] text-zinc-100 min-h-screen antialiased selection:bg-amber-500 selection:text-zinc-950 relative overflow-x-hidden">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,100..1000&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body className="bg-[#08090d] text-zinc-100 min-h-screen antialiased selection:bg-amber-500 selection:text-zinc-950 relative overflow-x-hidden font-sans">
         {/* Orbes de luz ambiental líquida de alto rendimiento (renderizado nativo por GPU sin filtros blur) */}
         <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
           <div

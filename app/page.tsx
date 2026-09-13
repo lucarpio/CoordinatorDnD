@@ -7,7 +7,7 @@ import {
   Dices,
   Calendar,
   Users,
-  Sparkles,
+  Swords,
   ArrowRight,
   Copy,
   Check,
@@ -16,6 +16,8 @@ import {
   X,
   BookmarkCheck,
   Clock,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { supabase, TimeMode, SlotId } from "@/lib/supabase";
 import { MONTH_NAMES } from "@/lib/calendarUtils";
@@ -25,6 +27,28 @@ import { useTutorial } from "@/context/TutorialContext";
 import TutorialCallout from "@/components/TutorialCallout";
 import Button from "@/components/ui/Button";
 import SegmentedControl from "@/components/ui/SegmentedControl";
+
+const HOURS_12 = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
+const MINUTES_STEPS = ["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"];
+
+function parseTimeComponents(timeStr: string) {
+  const [hStr, mStr] = (timeStr || "20:30").split(":");
+  let h = parseInt(hStr, 10);
+  if (isNaN(h)) h = 20;
+  const period: "AM" | "PM" = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  const hour = String(h12).padStart(2, "0");
+  const minute = mStr || "30";
+  return { hour, minute, period, hour24: h };
+}
+
+function build24hTime(hourStr: string, minuteStr: string, period: "AM" | "PM"): string {
+  let h = parseInt(hourStr, 10);
+  if (isNaN(h)) h = 8;
+  if (period === "PM" && h < 12) h += 12;
+  if (period === "AM" && h === 12) h = 0;
+  return `${String(h).padStart(2, "0")}:${minuteStr}`;
+}
 
 export default function Home() {
   const router = useRouter();
@@ -249,27 +273,23 @@ export default function Home() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-10">
+    <div className="max-w-4xl lg:max-w-5xl mx-auto space-y-5 sm:space-y-6">
       {/* Hero Section */}
-      <div className="text-center space-y-4 pt-4">
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full liquid-glass-subtle text-amber-300 text-xs font-semibold tracking-wide border border-white/10 shadow-sm">
-          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-          {t("home.badge")} • Zero Login
-        </div>
-        <h1 className="text-3xl sm:text-5xl font-extrabold text-zinc-100 tracking-tight">
+      <div className="text-center pt-2">
+        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-zinc-100 tracking-tight">
           {t("home.heroTitle")}{" "}
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 drop-shadow-sm">
             D&D
           </span>
         </h1>
-        <p className="text-zinc-400 text-sm sm:text-base max-w-xl mx-auto leading-relaxed">
-          {t("home.heroSubtitle")}
-        </p>
       </div>
 
       {/* Modal / Card de Éxito cuando se crea la sala */}
       {createdRoom ? (
-        <div className="liquid-glass-elevated rounded-3xl p-6 sm:p-8 space-y-6 animate-in fade-in zoom-in-95 duration-300 relative overflow-hidden">
+        <div
+          data-testid="created-room-success-card"
+          className="liquid-glass-elevated rounded-3xl p-5 sm:p-7 space-y-5 animate-in fade-in zoom-in-95 duration-300 relative overflow-hidden"
+        >
           <div
             className="absolute -right-16 -top-16 w-48 h-48 rounded-full pointer-events-none"
             style={{
@@ -294,6 +314,7 @@ export default function Home() {
             </span>
             <div className="flex items-center gap-2">
               <input
+                data-testid="share-room-url-input"
                 type="text"
                 readOnly
                 value={getShareableUrl(createdRoom.slug)}
@@ -338,259 +359,422 @@ export default function Home() {
 
           {/* Formulario de Nueva Mesa */}
           <form
+            data-testid="create-poll-form"
             onSubmit={handleCreatePoll}
-            className="liquid-glass rounded-3xl p-6 sm:p-8 space-y-6 relative overflow-hidden"
+            className="liquid-glass rounded-3xl px-4 sm:px-5 md:px-6 py-3.5 sm:py-4 space-y-3.5 sm:space-y-4 relative overflow-hidden"
           >
-          {/* Sutil resplandor ámbar superior */}
-          <div
-            className="absolute -right-20 -top-20 w-52 h-52 rounded-full pointer-events-none"
-            style={{
-              background:
-                "radial-gradient(circle, rgba(245, 158, 11, 0.12) 0%, transparent 70%)",
-            }}
-          />
-
-          {errorMessage && (
-            <div className="p-4 rounded-2xl bg-red-950/40 border border-red-500/40 text-red-200 text-xs sm:text-sm flex items-start gap-3 backdrop-blur-md">
-              <AlertCircle className="w-5 h-5 flex-shrink-0 text-red-400" />
-              <p>{errorMessage}</p>
-            </div>
-          )}
-
-          {/* Título de la campaña */}
-          <div className="space-y-2">
-            <label htmlFor="campaign-title-input" className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
-              {t("home.campaignName")}
-            </label>
-            <input
-              id="campaign-title-input"
-              data-testid="campaign-title-input"
-              aria-label={t("home.campaignName")}
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder={t("home.campaignPlaceholder")}
-              required
-              className="w-full liquid-glass-input rounded-2xl px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-500"
+            {/* Sutil resplandor ámbar superior */}
+            <div
+              className="absolute -right-20 -top-20 w-52 h-52 rounded-full pointer-events-none"
+              style={{
+                background:
+                  "radial-gradient(circle, rgba(245, 158, 11, 0.12) 0%, transparent 70%)",
+              }}
             />
-            <p className="text-[11px] text-zinc-500">
-              {t("home.campaignHelp")}
-            </p>
-          </div>
 
-          {/* Mes y Año */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label htmlFor="campaign-month-select" className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-amber-400" />
-                {t("home.monthLabel")}
-              </label>
-              <select
-                id="campaign-month-select"
-                data-testid="campaign-month-select"
-                aria-label={t("home.monthLabel")}
-                value={month}
-                onChange={(e) => setMonth(Number(e.target.value))}
-                className="w-full liquid-glass-input rounded-2xl px-4 py-3 text-sm text-zinc-100 cursor-pointer"
-              >
-                {availableMonths.map((m) => (
-                  <option key={m.index} value={m.index} className="bg-zinc-900 text-zinc-100">
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="campaign-year-select" className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
-                {t("home.yearLabel")}
-              </label>
-              <select
-                id="campaign-year-select"
-                data-testid="campaign-year-select"
-                aria-label={t("home.yearLabel")}
-                value={year}
-                onChange={(e) => setYear(Number(e.target.value))}
-                className="w-full liquid-glass-input rounded-2xl px-4 py-3 text-sm text-zinc-100 cursor-pointer"
-              >
-                {[currentYear, currentYear + 1].map((y) => (
-                  <option key={y} value={y} className="bg-zinc-900 text-zinc-100">
-                    {y}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Participantes */}
-          <div className="space-y-3">
-            <label htmlFor="participant-input" className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <Users className="w-3.5 h-3.5 text-amber-400" />
-                {t("home.participantsLabel")} ({participants.length})
-              </span>
-              <span className="text-[11px] text-zinc-500 font-normal">
-                (Min 2)
-              </span>
-            </label>
-
-            <div className="flex gap-2">
-              <input
-                id="participant-input"
-                data-testid="participant-input"
-                aria-label={t("home.participantsLabel")}
-                type="text"
-                value={participantInput}
-                onChange={(e) => setParticipantInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={t("home.participantPlaceholder")}
-                className="flex-1 liquid-glass-input rounded-2xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500"
-              />
-              <Button
-                type="button"
-                variant="subtle"
-                size="sm"
-                onClick={handleAddParticipant}
-                data-testid="add-participant-btn"
-                aria-label={t("home.addBtn")}
-                icon={<Plus className="w-4 h-4" />}
-              >
-                {t("home.addBtn")}
-              </Button>
-            </div>
-
-            {/* Tags de participantes */}
-            {participants.length === 0 ? (
-              <div className="p-4 rounded-2xl border border-dashed border-white/10 bg-white/[0.02] text-center text-xs text-zinc-500 backdrop-blur-sm">
-                {t("home.emptyParticipants")}
+            {/* Cabecera del Formulario */}
+            <div className="flex items-center justify-between border-b border-white/[0.08] pb-2.5 relative z-10">
+              <div className="flex items-center gap-2.5">
+                <span className="w-7 h-7 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-400/30">
+                  <Dices className="w-3.5 h-3.5" />
+                </span>
+                <h2 className="text-sm sm:text-base font-bold text-zinc-100 tracking-tight">
+                  {t("home.formTitle")}
+                </h2>
               </div>
-            ) : (
-              <div className="flex flex-wrap gap-2 pt-1">
-                {participants.map((name) => (
-                  <span
-                    key={name}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-2xl liquid-glass-subtle border border-white/15 text-zinc-100 text-xs font-semibold shadow-sm"
-                  >
-                    <span>{name}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveParticipant(name)}
-                      data-testid={`remove-participant-${name.toLowerCase().replace(/\s+/g, "-")}`}
-                      aria-label={`${locale === "en" ? "Remove" : "Eliminar"} ${name}`}
-                      className="text-zinc-400 hover:text-red-400 transition-colors p-0.5"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </span>
-                ))}
+              <span className="text-xs text-zinc-500 hidden sm:inline-block">
+                CoordinatorDnD
+              </span>
+            </div>
+
+            {errorMessage && (
+              <div
+                data-testid="form-error-alert"
+                className="p-3 rounded-2xl bg-red-950/40 border border-red-500/40 text-red-200 text-xs sm:text-sm flex items-start gap-3 backdrop-blur-md relative z-10"
+              >
+                <AlertCircle className="w-4 h-4 flex-shrink-0 text-red-400 mt-0.5" />
+                <p data-testid="form-error-message">{errorMessage}</p>
               </div>
             )}
-          </div>
 
-          {/* Modalidad de Horario (Horario Único vs Franjas) */}
-          <div className="space-y-3 pt-2 border-t border-white/[0.08]">
-            <label className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-amber-400" />
-              {t("home.scheduleModeTitle")}
-            </label>
-
-            {/* Segmented Control iOS */}
-            <SegmentedControl
-              value={timeMode}
-              onChange={(val) => setTimeMode(val as TimeMode)}
-              fullWidth
-              options={[
-                {
-                  value: "single",
-                  label: t("home.scheduleModeSingle"),
-                  testId: "schedule-mode-single-btn",
-                },
-                {
-                  value: "slots",
-                  label: t("home.scheduleModeSlots"),
-                  testId: "schedule-mode-slots-btn",
-                },
-              ]}
-            />
-
-            {/* Contenido según el modo */}
-            {timeMode === "single" ? (
-              <div className="space-y-1.5 pt-1">
+            {/* Grid Principal de 2 Filas x 2 Columnas */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-y-3.5 gap-x-4 md:gap-x-5 relative z-10">
+              {/* Fila 1 / Columna 1: Título de la campaña */}
+              <div className="space-y-1.5">
                 <label
-                  htmlFor="default-time-input"
-                  className="block text-[11px] text-zinc-400 font-medium"
+                  htmlFor="campaign-title-input"
+                  className="h-5 text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5"
                 >
-                  {t("home.scheduleSingleTimeLabel")}
+                  <Swords className="w-3.5 h-3.5 text-amber-400" />
+                  {t("home.campaignName")}
                 </label>
+                <input
+                  id="campaign-title-input"
+                  data-testid="campaign-title-input"
+                  aria-label={t("home.campaignName")}
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder={t("home.campaignPlaceholder")}
+                  required
+                  className="w-full h-10 liquid-glass-input rounded-xl px-3.5 text-xs sm:text-sm text-zinc-100 placeholder:text-zinc-500"
+                />
+              </div>
+
+              {/* Fila 1 / Columna 2: Mes y Año */}
+              <div className="space-y-1.5">
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="space-y-1.5">
+                    <label
+                      htmlFor="campaign-month-select"
+                      className="h-5 text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5"
+                    >
+                      <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                      {t("home.monthLabel")}
+                    </label>
+                    <select
+                      id="campaign-month-select"
+                      data-testid="campaign-month-select"
+                      aria-label={t("home.monthLabel")}
+                      value={month}
+                      onChange={(e) => setMonth(Number(e.target.value))}
+                      className="w-full h-10 liquid-glass-input rounded-xl px-3 text-xs sm:text-sm text-zinc-100 cursor-pointer"
+                    >
+                      {availableMonths.map((m) => (
+                        <option key={m.index} value={m.index} className="bg-zinc-900 text-zinc-100">
+                          {m.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label
+                      htmlFor="campaign-year-select"
+                      className="h-5 text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5"
+                    >
+                      <Calendar className="w-3.5 h-3.5 text-amber-400/60" />
+                      {t("home.yearLabel")}
+                    </label>
+                    <select
+                      id="campaign-year-select"
+                      data-testid="campaign-year-select"
+                      aria-label={t("home.yearLabel")}
+                      value={year}
+                      onChange={(e) => setYear(Number(e.target.value))}
+                      className="w-full h-10 liquid-glass-input rounded-xl px-3 text-xs sm:text-sm text-zinc-100 cursor-pointer"
+                    >
+                      {[currentYear, currentYear + 1].map((y) => (
+                        <option key={y} value={y} className="bg-zinc-900 text-zinc-100">
+                          {y}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Fila 2 / Columna 1: Panel Dedicado de Aventureros / Jugadores */}
+              <div
+                data-testid="players-card"
+                className="liquid-glass-subtle rounded-2xl p-3.5 sm:p-4 border border-white/10 space-y-2.5 flex flex-col h-full"
+              >
+                <div className="flex items-center justify-between">
+                  <label
+                    htmlFor="participant-input"
+                    className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5"
+                  >
+                    <Users className="w-3.5 h-3.5 text-amber-400" />
+                    {t("home.participantsLabel")}
+                    <span
+                      data-testid="participants-count"
+                      className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-400/30 text-[10px] font-bold"
+                    >
+                      {participants.length}
+                    </span>
+                  </label>
+                  <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
+                    Min 2
+                  </span>
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    id="participant-input"
+                    data-testid="participant-input"
+                    aria-label={t("home.participantsLabel")}
+                    type="text"
+                    value={participantInput}
+                    onChange={(e) => setParticipantInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder={t("home.participantPlaceholder")}
+                    className="flex-1 liquid-glass-input rounded-xl px-3 py-2 text-xs sm:text-sm text-zinc-100 placeholder:text-zinc-500"
+                  />
+                  <Button
+                    type="button"
+                    variant="subtle"
+                    size="sm"
+                    onClick={handleAddParticipant}
+                    data-testid="add-participant-btn"
+                    aria-label={t("home.addBtn")}
+                    icon={<Plus className="w-4 h-4" />}
+                  >
+                    {t("home.addBtn")}
+                  </Button>
+                </div>
+
+                {/* Lista con scroll compacto de participantes */}
+                <div
+                  data-testid="participants-list"
+                  className="flex-1 min-h-[90px] overflow-y-auto pr-1 flex flex-col"
+                >
+                  {participants.length === 0 ? (
+                    <div
+                      data-testid="empty-participants-placeholder"
+                      className="flex-1 rounded-xl border border-dashed border-white/10 bg-white/[0.02] flex flex-col items-center justify-center p-3 text-center text-xs text-zinc-500"
+                    >
+                      <Users className="w-4 h-4 text-zinc-600 mb-1 opacity-60" />
+                      <p className="leading-snug text-[11px] sm:text-xs text-zinc-400 max-w-[280px]">
+                        {t("home.emptyParticipants")}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      {participants.map((name) => (
+                        <span
+                          key={name}
+                          data-testid={`participant-chip-${name.toLowerCase().replace(/\s+/g, "-")}`}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl liquid-glass-subtle border border-white/15 text-zinc-100 text-xs font-semibold shadow-sm"
+                        >
+                          <span className="w-4 h-4 rounded-full bg-amber-500/20 text-amber-300 flex items-center justify-center text-[10px] font-black">
+                            {name.charAt(0).toUpperCase()}
+                          </span>
+                          <span data-testid="participant-name">{name}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveParticipant(name)}
+                            data-testid={`remove-participant-${name.toLowerCase().replace(/\s+/g, "-")}`}
+                            aria-label={`${locale === "en" ? "Remove" : "Eliminar"} ${name}`}
+                            className="text-zinc-400 hover:text-red-400 transition-colors p-0.5"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Fila 2 / Columna 2: Modalidad de Horario (Horario Único vs Franjas) */}
+              <div
+                data-testid="schedule-mode-card"
+                className="liquid-glass-subtle rounded-2xl p-3.5 sm:p-4 border border-white/10 space-y-2.5 flex flex-col h-full"
+              >
+                <label className="block text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-amber-400" />
+                  {t("home.scheduleModeTitle")}
+                </label>
+
+                {/* Segmented Control iOS */}
+                <SegmentedControl
+                  value={timeMode}
+                  onChange={(val) => setTimeMode(val as TimeMode)}
+                  fullWidth
+                  options={[
+                    {
+                      value: "single",
+                      label: t("home.scheduleModeSingle"),
+                      testId: "schedule-mode-single-btn",
+                    },
+                    {
+                      value: "slots",
+                      label: t("home.scheduleModeSlots"),
+                      testId: "schedule-mode-slots-btn",
+                    },
+                  ]}
+                />
+
+                {/* Input oculto para mantener compatibilidad de testid y formularios fuera de space-y-3 */}
                 <input
                   id="default-time-input"
                   data-testid="default-time-input"
-                  type="time"
+                  type="hidden"
                   value={defaultTime}
-                  onChange={(e) => setDefaultTime(e.target.value)}
-                  className="w-full sm:w-48 liquid-glass-input rounded-2xl px-4 py-2.5 text-sm text-zinc-100"
                 />
-              </div>
-            ) : (
-              <div className="space-y-2 pt-1">
-                <span className="block text-[11px] text-zinc-400 font-medium">
-                  {t("home.scheduleSlotsSelectLabel")}
-                </span>
-                {/* Píldoras interactivas estilo iOS Chips */}
-                <div className="flex flex-wrap gap-2.5">
-                  {(
-                    [
-                      { id: "morning" as const, label: t("home.slotMorning") },
-                      { id: "afternoon" as const, label: t("home.slotAfternoon") },
-                      { id: "night" as const, label: t("home.slotNight") },
-                    ]
-                  ).map((slot) => {
-                    const isSelected = selectedSlots.includes(slot.id);
-                    return (
-                      <button
-                        key={slot.id}
-                        type="button"
-                        onClick={() => toggleSlotSelection(slot.id)}
-                        data-testid={`slot-pill-${slot.id}`}
-                        aria-pressed={isSelected}
-                        className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all flex items-center gap-2 border active:scale-95 shadow-sm ${
-                          isSelected
-                            ? "bg-amber-500/25 border-amber-400/60 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.2)]"
-                            : "liquid-glass-subtle border-white/10 text-zinc-400 hover:text-zinc-200 hover:border-white/20 opacity-60"
-                        }`}
-                      >
-                        <span>{slot.label}</span>
-                        {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
 
-          <div className="pt-2">
-            <Button
-              type="submit"
-              variant="amber"
-              size="lg"
-              fullWidth
-              isLoading={isLoading}
-              disabled={isLoading}
-              data-testid="create-poll-submit-btn"
-              aria-label={isLoading ? t("home.creatingBtn") : t("home.submitBtn")}
-              icon={<Dices className="w-5 h-5" />}
-            >
-              {isLoading ? t("home.creatingBtn") : t("home.submitBtn")}
-            </Button>
-          </div>
-        </form>
-      </div>
+                {/* Contenido según el modo */}
+                {timeMode === "single" ? (
+                  (() => {
+                    const { hour, minute, period, hour24 } = parseTimeComponents(defaultTime);
+                    const isNight = hour24 >= 19 || hour24 < 6;
+
+                    const handleHourChange = (newHour: string) => {
+                      setDefaultTime(build24hTime(newHour, minute, period));
+                    };
+                    const handleMinuteChange = (newMinute: string) => {
+                      setDefaultTime(build24hTime(hour, newMinute, period));
+                    };
+                    const handlePeriodChange = (newPeriod: "AM" | "PM") => {
+                      setDefaultTime(build24hTime(hour, minute, newPeriod));
+                    };
+
+                    return (
+                      <div className="space-y-3 pt-0.5">
+                        {/* Cabecera contextual con icono de luna / sol */}
+                        <div className="h-5 flex items-center">
+                          <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                            {isNight ? (
+                              <Moon className="w-3.5 h-3.5 text-indigo-400" />
+                            ) : (
+                              <Sun className="w-3.5 h-3.5 text-amber-400" />
+                            )}
+                            {t("home.scheduleSingleTimeLabel")}
+                          </span>
+                        </div>
+
+                        {/* Triple Selector Segmentado Estilo iOS */}
+                        <div className="h-[62px] liquid-glass-subtle p-2 rounded-2xl border border-white/10 flex items-center justify-between gap-2 shadow-inner">
+                          {/* Selector de Hora (01 a 12) */}
+                          <div className="flex-1 relative">
+                            <select
+                              value={hour}
+                              onChange={(e) => handleHourChange(e.target.value)}
+                              data-testid="time-hour-select"
+                              aria-label={locale === "en" ? "Hour" : "Hora"}
+                              className="w-full h-11 liquid-glass-input rounded-xl text-center font-mono font-bold text-base sm:text-lg text-zinc-100 cursor-pointer appearance-none px-2 focus:ring-1 focus:ring-amber-400/50"
+                            >
+                              {HOURS_12.map((h) => (
+                                <option key={h} value={h} className="bg-zinc-900 text-zinc-100 font-mono">
+                                  {h}
+                                </option>
+                              ))}
+                            </select>
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500 text-[10px]">
+                              ▼
+                            </span>
+                          </div>
+
+                          {/* Separador de dos puntos */}
+                          <span className="text-xl font-mono font-black text-amber-400 animate-pulse select-none">
+                            :
+                          </span>
+
+                          {/* Selector de Minutos */}
+                          <div className="flex-1 relative">
+                            <select
+                              value={minute}
+                              onChange={(e) => handleMinuteChange(e.target.value)}
+                              data-testid="time-minute-select"
+                              aria-label={locale === "en" ? "Minute" : "Minutos"}
+                              className="w-full h-11 liquid-glass-input rounded-xl text-center font-mono font-bold text-base sm:text-lg text-zinc-100 cursor-pointer appearance-none px-2 focus:ring-1 focus:ring-amber-400/50"
+                            >
+                              {MINUTES_STEPS.map((m) => (
+                                <option key={m} value={m} className="bg-zinc-900 text-zinc-100 font-mono">
+                                  {m}
+                                </option>
+                              ))}
+                            </select>
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500 text-[10px]">
+                              ▼
+                            </span>
+                          </div>
+
+                          {/* Selector AM / PM Segmentado */}
+                          <div className="flex bg-black/40 p-0.5 rounded-xl border border-white/10 h-11 items-center">
+                            <button
+                              type="button"
+                              onClick={() => handlePeriodChange("AM")}
+                              data-testid="time-period-am-btn"
+                              className={`px-3 h-9 rounded-lg text-xs font-black transition-all flex items-center justify-center ${
+                                period === "AM"
+                                  ? "bg-amber-500/30 text-amber-300 border border-amber-400/40 shadow-sm"
+                                  : "text-zinc-500 hover:text-zinc-300"
+                              }`}
+                            >
+                              AM
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handlePeriodChange("PM")}
+                              data-testid="time-period-pm-btn"
+                              className={`px-3 h-9 rounded-lg text-xs font-black transition-all flex items-center justify-center ${
+                                period === "PM"
+                                  ? "bg-amber-500/30 text-amber-300 border border-amber-400/40 shadow-sm"
+                                  : "text-zinc-500 hover:text-zinc-300"
+                              }`}
+                            >
+                              PM
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()
+                ) : (
+                  <div className="space-y-3 pt-0.5">
+                    <div className="h-5 flex items-center">
+                      <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-amber-400" />
+                        {t("home.scheduleSlotsSelectLabel")}
+                      </span>
+                    </div>
+                    <div data-testid="schedule-slots-container" className="h-[62px] grid grid-cols-3 gap-2 items-center w-full">
+                      {(
+                        [
+                          { id: "morning" as const, label: t("home.slotMorning") },
+                          { id: "afternoon" as const, label: t("home.slotAfternoon") },
+                          { id: "night" as const, label: t("home.slotNight") },
+                        ]
+                      ).map((slot) => {
+                        const isSelected = selectedSlots.includes(slot.id);
+                        return (
+                          <button
+                            key={slot.id}
+                            type="button"
+                            onClick={() => toggleSlotSelection(slot.id)}
+                            data-testid={`slot-pill-${slot.id}`}
+                            aria-pressed={isSelected}
+                            className={`w-full h-11 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border active:scale-95 shadow-sm ${
+                              isSelected
+                                ? "bg-amber-500/25 border-amber-400/60 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.2)]"
+                                : "liquid-glass-subtle border-white/10 text-zinc-400 hover:text-zinc-200 hover:border-white/20 opacity-60"
+                            }`}
+                          >
+                            <span className="truncate">{slot.label}</span>
+                            {isSelected && <Check className="w-3.5 h-3.5 stroke-[3] shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Botón de Enviar */}
+            <div className="pt-1.5 border-t border-white/[0.08] relative z-10">
+              <Button
+                type="submit"
+                variant="amber"
+                size="lg"
+                fullWidth
+                isLoading={isLoading}
+                disabled={isLoading}
+                data-testid="create-poll-submit-btn"
+                aria-label={isLoading ? t("home.creatingBtn") : t("home.submitBtn")}
+                icon={<Dices className="w-5 h-5" />}
+              >
+                {isLoading ? t("home.creatingBtn") : t("home.submitBtn")}
+              </Button>
+            </div>
+          </form>
+        </div>
       )}
 
       {/* Sección de acceso directo a Mesas Guardadas si existen */}
       {savedPolls.length > 0 && (
-        <div className="liquid-glass rounded-3xl p-5 sm:p-6 space-y-4">
+        <div data-testid="recent-polls-section" className="liquid-glass rounded-3xl p-5 sm:p-6 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <BookmarkCheck className="w-5 h-5 text-amber-400" />
@@ -600,6 +784,7 @@ export default function Home() {
             </div>
             <Link
               href="/mis-mesas"
+              data-testid="view-all-recent-polls-link"
               className="text-xs font-semibold text-amber-400 hover:text-amber-300 flex items-center gap-1 transition-colors"
             >
               {t("home.viewAll")}
@@ -607,20 +792,21 @@ export default function Home() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {savedPolls.slice(0, 4).map((poll) => {
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {savedPolls.slice(0, 6).map((poll) => {
               const monthName = MONTH_NAMES[locale][poll.month - 1] || "Mes";
               return (
                 <Link
                   key={poll.slug}
                   href={`/m/${poll.slug}`}
-                  className="p-4 rounded-2xl liquid-glass-subtle hover:border-amber-400/40 hover:bg-white/[0.08] transition-all group flex items-center justify-between active:scale-[0.98]"
+                  data-testid={`recent-poll-link-${poll.slug}`}
+                  className="p-3.5 rounded-2xl liquid-glass-subtle hover:border-amber-400/40 hover:bg-white/[0.08] transition-all group flex items-center justify-between active:scale-[0.98]"
                 >
-                  <div className="min-w-0 pr-3">
-                    <p className="text-sm font-bold text-zinc-200 group-hover:text-amber-300 truncate transition-colors">
+                  <div className="min-w-0 pr-2.5">
+                    <p className="text-xs sm:text-sm font-bold text-zinc-200 group-hover:text-amber-300 truncate transition-colors">
                       {poll.title}
                     </p>
-                    <p className="text-xs text-zinc-400 mt-0.5">
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
                       {monthName} {poll.year}
                     </p>
                   </div>
